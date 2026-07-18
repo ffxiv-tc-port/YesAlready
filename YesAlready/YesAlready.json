@@ -1,11 +1,11 @@
 {
-  "Author": "daemitus, croizat",
+  "Author": "daemitus, croizat, Lother",
   "Name": "YesAlready",
-  "Punchline": "Clicks Yes in various dialogs you've specified.",
-  "Description": "Tired of clicking yes in Praetorium? Can't stand using keys in dungeons? Well do I have the plugin for you! Yes Already is specifically designed to click all the annoying dialogs you've grown accustomed facerolling. Just enter the dialog text, and you'll never see it again! Also works with /regex/ and has several built-in modules for dialogs that aren't quite yes/no prompts but act like it (like desynth).",
+  "Punchline": "自動點擊你指定的各種確認對話框。",
+  "Description": "厭倦了在天守閣/伊迪爾夏爾禁地一直點確認嗎？受不了在副本裡一直按鍵嗎？YesAlready 可以自動點擊你設定的所有惱人對話框。只要輸入對話文字，就再也不用手動點了！支援 /regex/ 比對，也內建了幾個針對「看起來不是 yes/no，但行為類似」的對話框（例如分解）的模組。",
   "InternalName": "YesAlready",
-  "RepoUrl": "https://github.com/PunishXIV/YesAlready/",
-  "IconUrl": "https://github.com/daemitus/YesAlready/raw/master/res/icon.png",
+  "RepoUrl": "https://github.com/Lother/YesAlready",
+  "IconUrl": "https://raw.githubusercontent.com/Lother/DalamudPluginsTC/main/icons/YesAlready.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 12,
   "Tags": [
