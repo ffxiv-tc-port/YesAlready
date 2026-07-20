@@ -14,7 +14,7 @@ public static class Lists
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "新增項目"))
         {
             var newNode = new ListEntryNode { Enabled = false, Text = "Your text goes here" };
             ListRootFolder.Children.Add(newNode);
@@ -22,7 +22,7 @@ public static class Lists
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last selected as new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "將最近選擇的內容新增為項目"))
         {
             var newNode = new ListEntryNode { Enabled = true, Text = Service.Watcher.LastSeenListSelection, TargetRestricted = true, TargetText = Service.Watcher.LastSeenListTarget };
             ListRootFolder.Children.Add(newNode);
@@ -30,7 +30,7 @@ public static class Lists
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "新增資料夾"))
         {
             var newNode = new TextFolderNode { Name = "Untitled folder" };
             ListRootFolder.Children.Add(newNode);
@@ -38,19 +38,19 @@ public static class Lists
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("Enter into the input all or part of the text inside a line in a list dialog.");
-        sb.AppendLine("For example: \"Purchase a Mini Cactpot ticket\" in the Gold Saucer.");
+        sb.AppendLine("在輸入框中輸入清單對話框中某一列文字的全部或部分內容。");
+        sb.AppendLine("例如：黃金水都中可輸入「Purchase a Mini Cactpot ticket」。");
         sb.AppendLine();
-        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.");
-        sb.AppendLine("As such: \"/Purchase a .*? ticket/\"");
+        sb.AppendLine("也可以將文字用斜線包起來作為正規表示式使用。");
+        sb.AppendLine("如：\"/Purchase a .*? ticket/\"");
         sb.AppendLine();
-        sb.AppendLine("If any line in the list matches, then that line will be chosen.");
+        sb.AppendLine("若清單中任一列符合，該列即會被選擇。");
         sb.AppendLine();
-        sb.AppendLine("Right click a line to view options.");
-        sb.AppendLine("Double click an entry for quick enable/disable.");
-        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.");
+        sb.AppendLine("右鍵點擊一列可檢視選項。");
+        sb.AppendLine("雙擊項目可快速啟用/停用。");
+        sb.AppendLine("Ctrl-Shift 右鍵點擊一列可刪除該項目及其子項目。");
         sb.AppendLine();
-        sb.AppendLine("Currently supported list addons:");
+        sb.AppendLine("目前支援的清單 Addon：");
         sb.AppendLine("  - SelectString");
         sb.AppendLine("  - SelectIconString");
 
@@ -79,11 +79,11 @@ public static class Lists
             ImGui.PopStyleColor();
 
         if (!validRegex && !validTarget)
-            ImGuiX.TextTooltip("Invalid Text and Target Regex");
+            ImGuiX.TextTooltip("無效的文字與目標正規表示式");
         else if (!validRegex)
-            ImGuiX.TextTooltip("Invalid Text Regex");
+            ImGuiX.TextTooltip("無效的文字正規表示式");
         else if (!validTarget)
-            ImGuiX.TextTooltip("Invalid Target Regex");
+            ImGuiX.TextTooltip("無效的目標正規表示式");
 
         if (ImGui.IsItemHovered())
         {
@@ -122,7 +122,7 @@ public static class Lists
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("啟用", ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -131,7 +131,7 @@ public static class Lists
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "刪除"))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
@@ -148,7 +148,7 @@ public static class Lists
         }
 
         var targetRestricted = node.TargetRestricted;
-        if (ImGui.Checkbox("Target Restricted", ref targetRestricted))
+        if (ImGui.Checkbox("限制目標", ref targetRestricted))
         {
             node.TargetRestricted = targetRestricted;
             C.Save();
@@ -157,7 +157,7 @@ public static class Lists
         var searchPlusWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.SearchPlus);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchPlusWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current target"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "填入目前目標"))
         {
             var target = Svc.Targets.Target;
             var name = target?.Name?.TextValue ?? string.Empty;
@@ -169,7 +169,7 @@ public static class Lists
             }
             else
             {
-                node.TargetText = "Could not find target";
+                node.TargetText = "找不到目標";
                 C.Save();
             }
         }
