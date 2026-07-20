@@ -8,7 +8,7 @@ namespace YesAlready.Interface;
 
 internal class ZoneListWindow : Window
 {
-    public static string Title = $"{Name} Zone List";
+    public static string Title = $"{Name} 區域列表";
     private bool sortZoneByName = false;
     public ZoneListWindow() : base(Title)
     {
@@ -20,16 +20,16 @@ internal class ZoneListWindow : Window
     {
         using var _ = ImRaii.PushColor(ImGuiCol.ResizeGrip, 0);
 
-        ImGui.Text($"Current ID: {Svc.ClientState.TerritoryType}");
+        ImGui.Text($"目前 ID：{Svc.ClientState.TerritoryType}");
 
-        ImGui.Checkbox("Sort by Name", ref sortZoneByName);
+        ImGui.Checkbox("依名稱排序", ref sortZoneByName);
 
         ImGui.Columns(2);
 
         ImGui.Text("ID");
         ImGui.NextColumn();
 
-        ImGui.Text("Name");
+        ImGui.Text("名稱");
         ImGui.NextColumn();
 
         ImGui.Separator();

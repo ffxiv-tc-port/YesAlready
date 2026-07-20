@@ -20,7 +20,7 @@ public class YesNo
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "新增項目"))
         {
             var newNode = new TextEntryNode { Enabled = false, Text = "Your text goes here" };
             RootFolder.Children.Add(newNode);
@@ -28,7 +28,7 @@ public class YesNo
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last seen as new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "將最近出現的內容新增為項目"))
         {
             var io = ImGui.GetIO();
             var zoneRestricted = io.KeyCtrl;
@@ -40,34 +40,34 @@ public class YesNo
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "新增資料夾"))
         {
-            var newNode = new TextFolderNode { Name = "Untitled folder" };
+            var newNode = new TextFolderNode { Name = "未命名資料夾" };
             RootFolder.Children.Add(newNode);
             C.Save();
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("Enter into the input all or part of the text inside a dialog.");
-        sb.AppendLine("For example: \"Teleport to \" for the teleport dialog.");
+        sb.AppendLine("在輸入框中輸入對話框內文字的全部或部分內容。");
+        sb.AppendLine("例如：傳送對話框可輸入「Teleport to 」。");
         sb.AppendLine();
-        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.");
-        sb.AppendLine("As such: \"/Teleport to .*? for \\d+(,\\d+)? gil\\?/\"");
-        sb.AppendLine("Or simpler: \"/Teleport to .*?/\" (and hope it doesn't match something unexpected)");
+        sb.AppendLine("也可以將文字用斜線包起來作為正規表示式使用。");
+        sb.AppendLine("如：\"/Teleport to .*? for \\d+(,\\d+)? gil\\?/\"");
+        sb.AppendLine("或更簡單：\"/Teleport to .*?/\"（但要注意可能意外符合到其他內容）");
         sb.AppendLine();
-        sb.AppendLine("If it matches, the yes button (and checkbox if present) will be clicked.");
+        sb.AppendLine("若符合，會自動點擊「是」按鈕（如有勾選框則一併勾選）。");
         sb.AppendLine();
-        sb.AppendLine("Right click a line to view options.");
-        sb.AppendLine("Double click an entry for quick enable/disable.");
-        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.");
+        sb.AppendLine("右鍵點擊一列可檢視選項。");
+        sb.AppendLine("雙擊項目可快速啟用/停用。");
+        sb.AppendLine("Ctrl-Shift 右鍵點擊一列可刪除該項目及其子項目。");
         sb.AppendLine();
-        sb.AppendLine("\"Add last seen as new entry\" button modifiers:");
-        sb.AppendLine("   Shift-Click to add to a new or first existing folder with the current zone name, restricted to that zone.");
-        sb.AppendLine("   Ctrl-Click to create a entry restricted to the current zone, without a named folder.");
-        sb.AppendLine("   Alt-Click to create a \"Select No\" entry instead of \"Select Yes\"");
-        sb.AppendLine("   Alt-Click can be combined with Shift/Ctrl-Click.");
+        sb.AppendLine("「將最近出現的內容新增為項目」按鈕的修飾鍵：");
+        sb.AppendLine("   Shift-點擊：新增到以目前區域名稱命名的新（或既有）資料夾，並限制在該區域內。");
+        sb.AppendLine("   Ctrl-點擊：建立一個限制在目前區域內的項目，不建立具名資料夾。");
+        sb.AppendLine("   Alt-點擊：建立「選擇否」項目，而非「選擇是」。");
+        sb.AppendLine("   Alt-點擊可與 Shift/Ctrl-點擊組合使用。");
         sb.AppendLine();
-        sb.AppendLine("Currently supported text addons:");
+        sb.AppendLine("目前支援的文字 Addon：");
         sb.AppendLine("  - SelectYesNo");
 
         ImGui.SameLine();
@@ -86,30 +86,30 @@ public class YesNo
         if (popup.Success)
         {
             var gimmickConfirm = C.GimmickYesNo;
-            if (ImGui.Checkbox("Auto GimmickYesNo", ref gimmickConfirm))
+            if (ImGui.Checkbox("自動 GimmickYesNo", ref gimmickConfirm))
             {
                 C.GimmickYesNo = gimmickConfirm;
                 C.Save();
             }
-            ImGuiX.IndentedTextColored("Automatically confirm any Yesno dialogs that are part of the GimmickYesNo sheet.\nThese are mostly the dungeon Yesnos like \"Unlock this door?\" or \"Pickup this item?\"", wrapped: false);
+            ImGuiX.IndentedTextColored("自動確認屬於 GimmickYesNo 表格的是/否對話框。\n這些多半是副本中的是/否對話，例如「要解鎖這扇門嗎？」或「要撿起這個物品嗎？」", wrapped: false);
 
             var pfConfirm = C.PartyFinderJoinConfirm;
-            if (ImGui.Checkbox("LookingForGroup x SelectYesno", ref pfConfirm))
+            if (ImGui.Checkbox("尋求小隊 x 是/否選擇", ref pfConfirm))
             {
                 C.PartyFinderJoinConfirm = pfConfirm;
                 C.Save();
             }
 
-            ImGuiX.IndentedTextColored("Automatically confirm when joining a party finder group.", wrapped: false);
+            ImGuiX.IndentedTextColored("加入招募小隊時自動確認。", wrapped: false);
 
             var autoCollect = C.AutoCollectable;
-            if (ImGui.Checkbox("Auto Collectables", ref autoCollect))
+            if (ImGui.Checkbox("自動收藏品", ref autoCollect))
             {
                 C.AutoCollectable = autoCollect;
                 C.Save();
             }
 
-            ImGuiX.IndentedTextColored("Automatically accept collectables that are worth turning in and decline insufficient ones.", wrapped: false);
+            ImGuiX.IndentedTextColored("自動接受值得繳交的收藏品，並拒絕價值不足的收藏品。", wrapped: false);
         }
     }
 
@@ -132,11 +132,11 @@ public class YesNo
             ImGui.PopStyleColor();
 
         if (!validRegex && !validZone)
-            ImGuiX.TextTooltip("Invalid Text and Zone Regex");
+            ImGuiX.TextTooltip("無效的文字與區域正規表示式");
         else if (!validRegex)
-            ImGuiX.TextTooltip("Invalid Text Regex");
+            ImGuiX.TextTooltip("無效的文字正規表示式");
         else if (!validZone)
-            ImGuiX.TextTooltip("Invalid Zone Regex");
+            ImGuiX.TextTooltip("無效的區域正規表示式");
 
         if (ImGui.IsItemHovered())
         {
@@ -175,7 +175,7 @@ public class YesNo
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = textNode.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("啟用", ref enabled))
         {
             textNode.Enabled = enabled;
             C.Save();
@@ -183,7 +183,7 @@ public class YesNo
 
         ImGui.SameLine(100f);
         var isYes = textNode.IsYes;
-        var title = isYes ? "Click Yes" : "Click No";
+        var title = isYes ? "點擊「是」" : "點擊「否」";
         if (ImGui.Button(title))
         {
             textNode.IsYes = !isYes;
@@ -193,7 +193,7 @@ public class YesNo
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "刪除"))
         {
             if (C.TryFindParent(textNode, out var parentNode))
             {
@@ -210,7 +210,7 @@ public class YesNo
         }
 
         var zoneRestricted = textNode.ZoneRestricted;
-        if (ImGui.Checkbox("Zone Restricted", ref zoneRestricted))
+        if (ImGui.Checkbox("限制區域", ref zoneRestricted))
         {
             textNode.ZoneRestricted = zoneRestricted;
             C.Save();
@@ -220,11 +220,11 @@ public class YesNo
         var searchPlusWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.SearchPlus);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.Search, "Zone List"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Search, "區域列表"))
             EzConfigGui.GetWindow<ZoneListWindow>()?.Toggle();
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchWidth - searchPlusWidth - spacing.X);
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current zone"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "填入目前區域"))
         {
             var currentID = Svc.ClientState.TerritoryType;
             if (P.TerritoryNames.TryGetValue(currentID, out var zoneName))
@@ -234,7 +234,7 @@ public class YesNo
             }
             else
             {
-                textNode.ZoneText = "Could not find name";
+                textNode.ZoneText = "找不到名稱";
                 C.Save();
             }
         }
@@ -247,15 +247,15 @@ public class YesNo
         }
 
         var conditionRestricted = textNode.RequiresPlayerConditions;
-        if (ImGui.Checkbox("Condition Restricted", ref conditionRestricted))
+        if (ImGui.Checkbox("限制條件", ref conditionRestricted))
         {
             textNode.RequiresPlayerConditions = conditionRestricted;
             C.Save();
         }
-        ImGuiComponents.HelpMarker($"Conditions can either be their name (case sensitive) or ID. They must be comma separated if there are multiple. Condition restricted only allows the match to go through if all conditions are met. If you would like to invert a condition, put a \"!\" in front of it.");
+        ImGuiComponents.HelpMarker($"條件可以是名稱（區分大小寫）或 ID，若有多個需以逗號分隔。限制條件只有在所有條件都符合時才會通過。若要反轉某個條件，請在前面加上「!」。");
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.Search, "Conditions List"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Search, "條件列表"))
             EzConfigGui.GetWindow<ConditionsListWindow>()?.Toggle();
 
         var playerConditions = textNode.PlayerConditions;
@@ -268,13 +268,13 @@ public class YesNo
         ImGui.NewLine();
 
         var conditional = textNode.IsConditional;
-        if (ImGui.Checkbox("Is Conditional", ref conditional))
+        if (ImGui.Checkbox("是條件式", ref conditional))
         {
             textNode.IsConditional = conditional;
             C.Save();
         }
 
-        ImGui.Text("Currently only supports number extraction");
+        ImGui.Text("目前僅支援數字擷取");
 
         var conditionalText = textNode.ConditionalNumberTemplate;
         if (ImGui.InputText($"##{textNode.Name}-conditionalText", ref conditionalText, 10_000, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
