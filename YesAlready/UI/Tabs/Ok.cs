@@ -1,4 +1,5 @@
 using Dalamud.Interface;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -14,7 +15,7 @@ public static class Ok
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "新增項目"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new OkEntryNode { Enabled = false, Text = "Your text goes here" };
             OkRootFolder.Children.Add(newNode);
@@ -22,7 +23,7 @@ public static class Ok
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "將最近出現的內容新增為項目"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last seen as new entry".Loc()))
         {
             var io = ImGui.GetIO();
             var createFolder = io.KeyShift;
@@ -32,7 +33,7 @@ public static class Ok
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "新增資料夾"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder".Loc()))
         {
             var newNode = new TextFolderNode { Name = "Untitled folder" };
             OkRootFolder.Children.Add(newNode);
@@ -40,22 +41,22 @@ public static class Ok
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("在輸入框中輸入對話框內文字的全部或部分內容。");
-        sb.AppendLine("例如：信箱已滿的對話框可輸入「You cannot carry any more letters」。");
+        sb.AppendLine("Enter into the input all or part of the text inside a dialog.".Loc());
+        sb.AppendLine("For example: \"You cannot carry any more letters\" for the full mailbox dialog.".Loc());
         sb.AppendLine();
-        sb.AppendLine("也可以將文字用斜線包起來作為正規表示式使用。");
-        sb.AppendLine("如：\"/.* carry any more letters .*/\"");
+        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.".Loc());
+        sb.AppendLine("As such: \"/.* carry any more letters .*/\"".Loc());
         sb.AppendLine();
-        sb.AppendLine("若符合，會自動點擊確定按鈕。");
+        sb.AppendLine("If it matches, the ok button will be clicked.".Loc());
         sb.AppendLine();
-        sb.AppendLine("右鍵點擊一列可檢視選項。");
-        sb.AppendLine("雙擊項目可快速啟用/停用。");
-        sb.AppendLine("Ctrl-Shift 右鍵點擊一列可刪除該項目及其子項目。");
+        sb.AppendLine("Right click a line to view options.".Loc());
+        sb.AppendLine("Double click an entry for quick enable/disable.".Loc());
+        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.".Loc());
         sb.AppendLine();
-        sb.AppendLine("「將最近出現的內容新增為項目」按鈕的修飾鍵：");
-        sb.AppendLine("   Shift-點擊：新增到新的或既有的第一個資料夾中。");
+        sb.AppendLine("\"Add last seen as new entry\" button modifiers:".Loc());
+        sb.AppendLine("   " + "Shift-Click to add to a new or first existing folder.".Loc());
         sb.AppendLine();
-        sb.AppendLine("目前支援的文字 Addon：");
+        sb.AppendLine("Currently supported text addons:".Loc());
         sb.AppendLine("  - SelectOk");
 
         ImGui.SameLine();
@@ -83,7 +84,7 @@ public static class Ok
             ImGui.PopStyleColor();
 
         if (!validRegex)
-            ImGuiX.TextTooltip("無效的文字正規表示式");
+            ImGuiX.TextTooltip("Invalid Text Regex".Loc());
 
         if (ImGui.IsItemHovered())
         {
@@ -122,7 +123,7 @@ public static class Ok
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("啟用", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -131,7 +132,7 @@ public static class Ok
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "刪除"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {

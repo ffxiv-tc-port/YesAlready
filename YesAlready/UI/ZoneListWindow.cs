@@ -1,5 +1,6 @@
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Linq;
 using System.Numerics;
@@ -8,7 +9,7 @@ namespace YesAlready.Interface;
 
 internal class ZoneListWindow : Window
 {
-    public static string Title = $"{Name} 區域列表";
+    public static string Title = $"{Name} " + "Zone List".Loc();
     private bool sortZoneByName = false;
     public ZoneListWindow() : base(Title)
     {
@@ -20,16 +21,16 @@ internal class ZoneListWindow : Window
     {
         using var _ = ImRaii.PushColor(ImGuiCol.ResizeGrip, 0);
 
-        ImGui.Text($"目前 ID：{Svc.ClientState.TerritoryType}");
+        ImGui.Text("Current ID: ??".Loc(Svc.ClientState.TerritoryType));
 
-        ImGui.Checkbox("依名稱排序", ref sortZoneByName);
+        ImGui.Checkbox("Sort by Name".Loc(), ref sortZoneByName);
 
         ImGui.Columns(2);
 
         ImGui.Text("ID");
         ImGui.NextColumn();
 
-        ImGui.Text("名稱");
+        ImGui.Text("Name".Loc());
         ImGui.NextColumn();
 
         ImGui.Separator();

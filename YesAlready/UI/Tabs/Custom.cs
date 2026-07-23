@@ -1,6 +1,7 @@
 ﻿using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -15,7 +16,7 @@ public static class Custom
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "新增項目"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new CustomEntryNode
             {
@@ -29,18 +30,18 @@ public static class Custom
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("這個區塊讓你可以建立自訂的「Bothers」。");
-        sb.AppendLine("許多 Bothers 都很簡單，只需在指定的 Addon 出現時，傳送單一回呼（callback）參數即可。這裡就是設定這類 Bothers 的地方。");
+        sb.AppendLine("This section allows you to build custom \"Bothers\".".Loc());
+        sb.AppendLine("Many bothers are very simple, consisting of a single callback parameter to a given addon when it appears. This is for those types of bothers.".Loc());
         sb.AppendLine();
-        sb.AppendLine("回呼參數的解析方式與 Something Need Doing 相同。");
-        sb.AppendLine("自訂 Bothers 是透過 AddonLifeCycle 在 PostSetup 事件中註冊的。");
+        sb.AppendLine("Callback parameter parsing works the same as in Something Need Doing.".Loc());
+        sb.AppendLine("Custom bothers are registered via AddonLifeCycle on the PostSetup event.".Loc());
         sb.AppendLine();
-        sb.AppendLine("有些 Bothers 可能需要不易實現的參數、等待時間或不同的 AddonEvent，這類需求仍可向一般的 Bothers 系統提出請求。");
+        sb.AppendLine("Some bothers may require infeasible parameters, waits, or different AddonEvents. Those can still be requested for the normal bother system.".Loc());
         sb.AppendLine();
-        sb.AppendLine("範例：");
+        sb.AppendLine("Example:".Loc());
         sb.AppendLine("   AddonName: Character");
         sb.AppendLine("   Parameters: -1");
-        sb.AppendLine("   效果：開啟角色（Character）Addon 時，會立即將其關閉。大概沒什麼用處。");
+        sb.AppendLine("   " + "Effect: When opening the Character addon, it will instantly be closed. Probably not useful.".Loc());
 
         ImGui.SameLine();
         ImGuiX.IconButton(FontAwesomeIcon.QuestionCircle, sb.ToString());
@@ -51,7 +52,7 @@ public static class Custom
     {
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, spacing);
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("啟用", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -61,7 +62,7 @@ public static class Custom
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "刪除"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
@@ -71,7 +72,7 @@ public static class Custom
             }
         }
 
-        ImGui.TextUnformatted("備註：");
+        ImGui.TextUnformatted("Note:".Loc());
         var noteText = node.Text;
         if (ImGui.InputText($"##{node.Name}-{nameof(noteText)}", ref noteText, 10_000, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
         {
@@ -79,9 +80,9 @@ public static class Custom
             C.Save();
         }
         ImGui.SameLine();
-        ImGuiComponents.HelpMarker("此欄位不會用於任何判斷，只是用來幫助記住這個 Bother 的用途。");
+        ImGuiComponents.HelpMarker("This is not used for anything, it's just a note to help remember what this bother does.".Loc());
 
-        ImGui.TextUnformatted("Addon 名稱：");
+        ImGui.TextUnformatted("Addon Name:".Loc());
         var addonName = node.Addon;
         if (ImGui.InputText($"##{node.Name}-{nameof(addonName)}", ref addonName, 100, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
         {
@@ -90,7 +91,7 @@ public static class Custom
             CustomAddonCallbacks.Toggle();
         }
 
-        ImGui.TextUnformatted("參數：");
+        ImGui.TextUnformatted("Parameters:".Loc());
         var callbackParams = node.CallbackParams;
         if (ImGui.InputText($"##{node.Name}-{nameof(callbackParams)}", ref callbackParams, 150, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
         {

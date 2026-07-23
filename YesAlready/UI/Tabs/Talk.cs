@@ -1,4 +1,5 @@
 using Dalamud.Interface;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -14,7 +15,7 @@ public static class Talk
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "新增項目"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" };
             TalkRootFolder.Children.Add(newNode);
@@ -22,7 +23,7 @@ public static class Talk
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "將目前目標新增為項目"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add current target as a new entry".Loc()))
         {
             var target = Svc.Targets.Target;
             if (target != null)
@@ -33,11 +34,11 @@ public static class Talk
                 C.Save();
             }
             else
-                Svc.Toasts.ShowError("無法新增項目：未選擇任何目標。");
+                Svc.Toasts.ShowError("Unable to add entry: no target selected.".Loc());
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "新增資料夾"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder".Loc()))
         {
             var newNode = new TextFolderNode { Name = "Untitled folder" };
             TalkRootFolder.Children.Add(newNode);
@@ -45,19 +46,19 @@ public static class Talk
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("在輸入框中輸入對話視窗中所選目標名稱的全部或部分內容。");
-        sb.AppendLine("例如：水晶都可輸入「Moyce」。");
+        sb.AppendLine("Enter into the input all or part of the selected taret name while in a talk dialog.".Loc());
+        sb.AppendLine("For example: \"Moyce\" in the Crystarium.".Loc());
         sb.AppendLine();
-        sb.AppendLine("也可以將文字用斜線包起來作為正規表示式使用。");
-        sb.AppendLine("如：\"/(Moyce|Eirikur)/\"");
+        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.".Loc());
+        sb.AppendLine("As such: \"/(Moyce|Eirikur)/\"".Loc());
         sb.AppendLine();
-        sb.AppendLine("若要略過你的雇員，請加入召喚鈴。");
+        sb.AppendLine("To skip your retainers, add the summoning bell.".Loc());
         sb.AppendLine();
-        sb.AppendLine("右鍵點擊一列可檢視選項。");
-        sb.AppendLine("雙擊項目可快速啟用/停用。");
-        sb.AppendLine("Ctrl-Shift 右鍵點擊一列可刪除該項目及其子項目。");
+        sb.AppendLine("Right click a line to view options.".Loc());
+        sb.AppendLine("Double click an entry for quick enable/disable.".Loc());
+        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.".Loc());
         sb.AppendLine();
-        sb.AppendLine("目前支援的清單 Addon：");
+        sb.AppendLine("Currently supported list addons:".Loc());
         sb.AppendLine("  - Talk");
 
         ImGui.SameLine();
@@ -84,7 +85,7 @@ public static class Talk
             ImGui.PopStyleColor();
 
         if (!validTarget)
-            ImGuiX.TextTooltip("無效的目標正規表示式");
+            ImGuiX.TextTooltip("Invalid Target Regex".Loc());
 
         if (ImGui.IsItemHovered())
         {
@@ -123,7 +124,7 @@ public static class Talk
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("啟用", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -132,7 +133,7 @@ public static class Talk
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "刪除"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
@@ -144,7 +145,7 @@ public static class Talk
         var searchPlusWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.SearchPlus);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchPlusWidth - trashAltWidth - spacing.X);
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "填入目前目標"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current target".Loc()))
         {
             var target = Svc.Targets.Target;
             var name = target?.Name?.TextValue ?? string.Empty;
@@ -156,7 +157,7 @@ public static class Talk
             }
             else
             {
-                node.TargetText = "找不到目標";
+                node.TargetText = "Could not find target";
                 C.Save();
             }
         }

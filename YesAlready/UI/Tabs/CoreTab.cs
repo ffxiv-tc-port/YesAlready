@@ -1,4 +1,5 @@
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System;
 using System.Collections.Generic;
@@ -42,7 +43,7 @@ public class CoreTab : BaseTab
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, newStyle);
 
         // Add new entry button with type selection
-        if (ImGui.Button("新增"))
+        if (ImGui.Button("Add New".Loc()))
         {
             ImGui.OpenPopup("AddNewEntry");
         }
@@ -50,7 +51,7 @@ public class CoreTab : BaseTab
 
         // Add last seen button with preview
         ImGui.SameLine();
-        if (ImGui.Button("新增最近出現"))
+        if (ImGui.Button("Add Last Seen".Loc()))
         {
             ImGui.OpenPopup("AddLastSeen");
         }
@@ -58,7 +59,7 @@ public class CoreTab : BaseTab
 
         // Add folder button
         ImGui.SameLine();
-        if (ImGui.Button("新增資料夾"))
+        if (ImGui.Button("Add Folder".Loc()))
         {
 
         }
@@ -73,11 +74,11 @@ public class CoreTab : BaseTab
 
         // Filter toggles
         ImGui.SameLine();
-        if (ImGui.Checkbox("顯示已啟用", ref showEnabled)) { }
+        if (ImGui.Checkbox("Show Enabled".Loc(), ref showEnabled)) { }
         ImGui.SameLine();
-        if (ImGui.Checkbox("顯示已停用", ref showDisabled)) { }
+        if (ImGui.Checkbox("Show Disabled".Loc(), ref showDisabled)) { }
         ImGui.SameLine();
-        if (ImGui.Checkbox("顯示無效項目", ref showInvalid)) { }
+        if (ImGui.Checkbox("Show Invalid".Loc(), ref showInvalid)) { }
 
         DrawHelpButton();
     }
@@ -103,31 +104,31 @@ public class CoreTab : BaseTab
     {
         if (ImGui.BeginPopup("AddNewEntry"))
         {
-            if (ImGui.Selectable("是/否對話框"))
+            if (ImGui.Selectable("Yes/No Dialog".Loc()))
             {
                 var newNode = new TextEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.RootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("確定對話框"))
+            if (ImGui.Selectable("OK Dialog".Loc()))
             {
                 var newNode = new OkEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.OkRootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("清單選擇"))
+            if (ImGui.Selectable("List Selection".Loc()))
             {
                 var newNode = new ListEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.ListRootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("對話框"))
+            if (ImGui.Selectable("Talk Dialog".Loc()))
             {
                 var newNode = new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" };
                 C.TalkRootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("數值輸入"))
+            if (ImGui.Selectable("Numeric Input".Loc()))
             {
                 var newNode = new NumericsEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.NumericsRootFolder.Children.Add(newNode);
@@ -141,9 +142,9 @@ public class CoreTab : BaseTab
     {
         if (ImGui.BeginPopup("AddLastSeen"))
         {
-            ImGui.Text("選擇類型並預覽：");
+            ImGui.Text("Select type and preview:".Loc());
 
-            if (ImGui.CollapsingHeader("是/否對話框"))
+            if (ImGui.CollapsingHeader("Yes/No Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenDialogText))
                 {
@@ -157,7 +158,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("確定對話框"))
+            if (ImGui.CollapsingHeader("OK Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenOkText))
                 {
@@ -171,7 +172,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("清單對話框"))
+            if (ImGui.CollapsingHeader("List Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenListSelection))
                 {
@@ -185,7 +186,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("對話框"))
+            if (ImGui.CollapsingHeader("Talk Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenTalkTarget))
                 {
@@ -199,7 +200,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("數值對話框"))
+            if (ImGui.CollapsingHeader("Numeric Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenNumericsText))
                 {
@@ -235,27 +236,27 @@ public class CoreTab : BaseTab
 
     private void DrawByTypeView()
     {
-        if (ImGui.CollapsingHeader("是/否對話框", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Yes/No Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.RootFolder, () => new TextEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
 
-        if (ImGui.CollapsingHeader("確定對話框", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("OK Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.OkRootFolder, () => new OkEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
 
-        if (ImGui.CollapsingHeader("清單對話框", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("List Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.ListRootFolder, () => new ListEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
 
-        if (ImGui.CollapsingHeader("對話框（Talk）", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Talk Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.TalkRootFolder, () => new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" });
         }
 
-        if (ImGui.CollapsingHeader("數值對話框", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Numeric Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.NumericsRootFolder, () => new NumericsEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
@@ -318,18 +319,18 @@ public class CoreTab : BaseTab
     private string GetHelpText()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("YesAlready 的核心功能：");
+        sb.AppendLine("Core features for YesAlready:".Loc());
         sb.AppendLine();
-        sb.AppendLine("檢視模式：");
-        sb.AppendLine("  - 依類型：依對話框類型分組項目");
-        sb.AppendLine("  - 依字母排序：簡單的字母排序清單");
-        sb.AppendLine("  - 資料夾：目前的資料夾結構");
+        sb.AppendLine("View Modes:".Loc());
+        sb.AppendLine("  - " + "By Type: Groups entries by their dialog type".Loc());
+        sb.AppendLine("  - " + "Alphabetical: Simple alphabetical list".Loc());
+        sb.AppendLine("  - " + "Folders: Current folder structure".Loc());
         sb.AppendLine();
-        sb.AppendLine("功能：");
-        sb.AppendLine("  - 新增：建立任意類型的新項目");
-        sb.AppendLine("  - 新增最近出現：從最近看到的對話框新增");
-        sb.AppendLine("  - 搜尋：依名稱或文字篩選項目");
-        sb.AppendLine("  - 顯示/隱藏：切換已啟用/已停用/無效項目的顯示狀態");
+        sb.AppendLine("Features:".Loc());
+        sb.AppendLine("  - " + "Add new entry: Create a new entry of any type".Loc());
+        sb.AppendLine("  - " + "Add last seen: Add from recently seen dialogs".Loc());
+        sb.AppendLine("  - " + "Search: Filter entries by name or text".Loc());
+        sb.AppendLine("  - " + "Show/Hide: Toggle visibility of enabled/disabled/invalid entries".Loc());
         return sb.ToString();
     }
 }
