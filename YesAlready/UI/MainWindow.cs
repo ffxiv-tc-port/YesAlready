@@ -6,7 +6,7 @@ using Dalamud.Interface.Windowing;
 using ECommons.GameHelpers;
 using ECommons.LanguageHelpers;
 using ECommons.Reflection;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -411,7 +411,7 @@ internal class MainWindow : Window
             DraggedNode = node;
 
             ImGui.Text(node.Name);
-            ImGui.SetDragDropPayload("TextNodePayload", IntPtr.Zero, 0);
+            ImGui.SetDragDropPayload("TextNodePayload", default, 0);
             ImGui.EndDragDropSource();
         }
 
@@ -422,7 +422,7 @@ internal class MainWindow : Window
             bool nullPtr;
             unsafe
             {
-                nullPtr = payload.NativePtr == null;
+                nullPtr = payload.Handle == null;
             }
 
             var targetNode = node;

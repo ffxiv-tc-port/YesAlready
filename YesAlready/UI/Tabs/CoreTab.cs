@@ -1,6 +1,6 @@
 using Dalamud.Interface.Utility.Raii;
 using ECommons.LanguageHelpers;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.Linq;

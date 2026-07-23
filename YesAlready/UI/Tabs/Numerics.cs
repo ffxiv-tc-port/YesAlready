@@ -1,6 +1,6 @@
 using Dalamud.Interface;
 using ECommons.LanguageHelpers;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System.Numerics;
 using System.Text;
 
