@@ -1,3 +1,4 @@
+using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Plugin;
@@ -53,12 +54,17 @@ public class YesAlready : IDalamudPlugin
         // .Text each frame, not .Tooltip, so the tooltip is updated as a side effect inside
         // the same per-frame Text callback (yesAlreadyDtr isn't invoked until the next
         // Framework.Update tick, well after this local is assigned, so the self-reference
-        // inside its own initializer is safe).
+        // inside its own initializer is safe). Arrow glyph identifies the entry as YesAlready
+        // (BitmapFontIcon has no play/fast-forward icon in this API generation - SeIconChar's
+        // smaller glyph set has ArrowRight instead, mixed into the same SeString as a
+        // TextPayload alongside the IconPayload state icon).
         EzDtr yesAlreadyDtr = null!;
         yesAlreadyDtr = new EzDtr(() =>
         {
             yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"));
-            return new SeString(new IconPayload(Active ? BitmapFontIcon.GreenDot : BitmapFontIcon.NoCircle));
+            return new SeString(
+                new TextPayload(SeIconChar.ArrowRight.ToIconString()),
+                new IconPayload(Active ? BitmapFontIcon.GreenDot : BitmapFontIcon.NoCircle));
         }, () => { C.Enabled ^= true; C.Save(); });
 
         LoadTerritories();
