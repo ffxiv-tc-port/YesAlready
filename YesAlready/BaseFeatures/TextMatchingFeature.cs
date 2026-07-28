@@ -50,7 +50,13 @@ public abstract class TextMatchingFeature : AddonFeature
         {
             try
             {
-                var regex = new Regex(pattern.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                var regex = RegexExtensions.TryCreateRegex(pattern.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                if (regex is null)
+                {
+                    LogError($"Invalid regex pattern {pattern}");
+                    return false;
+                }
+
                 if (regex.IsMatch(text))
                 {
                     LogVerbose($"Matched on regex {pattern} ({text})");
@@ -78,7 +84,13 @@ public abstract class TextMatchingFeature : AddonFeature
         {
             try
             {
-                var regex = new Regex(pattern.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                var regex = RegexExtensions.TryCreateRegex(pattern.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                if (regex is null)
+                {
+                    LogError($"Invalid regex pattern {pattern}");
+                    return null;
+                }
+
                 var match = regex.Match(text);
                 if (match.Success)
                 {

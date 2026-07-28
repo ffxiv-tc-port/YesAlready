@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
@@ -54,30 +55,35 @@ public interface IValidatable
 
 public static class RegexExtensions
 {
+    /// <summary>
+    /// Every <see cref="Regex"/> in this plugin is built with <see cref="RegexOptions.Compiled"/>, which emits
+    /// IL on construction. The config tree asks every node whether its pattern is valid on every draw call, and
+    /// the addon features rebuild the same patterns on every dialog, so constructing them on demand meant paying
+    /// that cost once per node per frame. Regex is immutable and thread safe, so one instance can be shared by
+    /// all of them instead.
+    /// <para/>
+    /// Keys are patterns authored by the user in the config. The node editors all commit with
+    /// <c>ImGuiInputTextFlags.EnterReturnsTrue</c>, so half-typed patterns never reach here and the cache stays
+    /// bounded by the size of the config. Invalid patterns are cached as <see langword="null"/> so a broken
+    /// pattern does not re-throw on every access either.
+    /// </summary>
+    private static readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex?> RegexCache = new();
+
     public static bool IsValidRegex(string pattern)
-    {
-        try
-        {
-            _ = new Regex(pattern);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => TryCreateRegex(pattern) is not null;
 
     public static Regex? TryCreateRegex(string pattern, RegexOptions options = RegexOptions.None)
-    {
-        try
+        => RegexCache.GetOrAdd((pattern, options), static key =>
         {
-            return new Regex(pattern, options);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+            try
+            {
+                return new Regex(key.Pattern, key.Options);
+            }
+            catch
+            {
+                return null;
+            }
+        });
 }
 
 public abstract class BaseTextNode : ITextNode
@@ -90,19 +96,7 @@ public abstract class BaseTextNode : ITextNode
 
     [JsonIgnore]
     public virtual Regex? TextRegex
-    {
-        get
-        {
-            try
-            {
-                return IsTextRegex ? new(Text.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase) : null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-    }
+        => IsTextRegex ? RegexExtensions.TryCreateRegex(Text.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase) : null;
 
     [JsonIgnore]
     public virtual string Name => Text;
