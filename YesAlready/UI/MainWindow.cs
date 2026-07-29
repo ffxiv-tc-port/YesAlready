@@ -433,7 +433,8 @@ internal class MainWindow : Window
                 var targetRoot = GetRootFolder(targetNode);
 
                 // Only allow drag and drop within the same root folder
-                if (draggedRoot == targetRoot)
+                // Reject drops that would nest a folder under itself
+                if (draggedRoot == targetRoot && !WouldCreateLoop(DraggedNode, targetNode))
                 {
                     if (C.TryFindParent(DraggedNode, out var draggedNodeParent))
                     {
@@ -478,6 +479,26 @@ internal class MainWindow : Window
 
             ImGui.EndDragDropTarget();
         }
+    }
+
+    // moving a folder into itself or a descendant orphans the subtree from the root
+    private static bool WouldCreateLoop(ITextNode dragged, ITextNode target)
+    {
+        if (dragged is not TextFolderNode draggedFolder)
+            return false;
+
+        if (ReferenceEquals(target, draggedFolder))
+            return true;
+
+        var current = target;
+        while (C.TryFindParent(current, out var parent) && parent != null)
+        {
+            if (ReferenceEquals(parent, draggedFolder))
+                return true;
+            current = parent;
+        }
+
+        return false;
     }
 
     private static TextFolderNode GetRootFolder(ITextNode node)
