@@ -13,7 +13,7 @@ internal class RetainerItemTransferProgress : AddonFeature
     {
         if (!GenericHelpers.TryGetAddonMaster<AddonMaster.RetainerItemTransferProgress>(out var am)) return;
 
-        if (MemoryHelper.ReadSeStringNullTerminated(new nint(am.Base->AtkValues[0].String)).GetText() == Svc.Data.GetExcelSheet<Addon>().First(x => x.RowId == 13528).Text)
+        if (MemoryHelper.ReadSeStringNullTerminated(new nint(am.Base->AtkValues[0].String)).GetText() == Svc.Data.GetExcelSheet<Addon>().GetRow(13528).Text)   // 原為 First(x => x.RowId == 13528):O(n) 全表掃描找主鍵,GetRow 是索引查詢
         {
             PluginLog.Debug("Closing Entrust Duplicates menu");
             am.Close();
