@@ -50,6 +50,10 @@ public partial class Configuration() : IPluginConfiguration
     public bool RetainerTransferProgressConfirm { get; set; } = false;
     public bool DesynthesisResults { get; set; } = false;
     public bool AetherialReductionResults { get; set; } = false;
+
+    /// <summary>精選結果視窗出現時替使用者按下遊戲自己的「自動」鈕（新功能，預設關）。</summary>
+    public bool AetherialReductionAutomatic { get; set; } = false;
+
     public bool FashionCheckQuit { get; set; } = false;
     public bool LordOfVerminionQuit { get; set; } = false;
     public bool ChocoboRacingQuit { get; set; } = false;
@@ -57,6 +61,7 @@ public partial class Configuration() : IPluginConfiguration
     public bool GimmickYesNo { get; set; } = false;
     public bool AutoCollectable { get; set; } = false;
     public bool LotteryWeeklyInput { get; set; } = false;
+
     public bool TradeMultiple { get; set; } = false;
     public TradeMultipleMode TransmuteMode { get; set; } = TradeMultipleMode.AllSame;
     public bool KupoOfFortune { get; set; } = false;

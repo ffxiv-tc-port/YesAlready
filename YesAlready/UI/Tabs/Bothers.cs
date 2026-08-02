@@ -130,6 +130,14 @@ public static class Bothers
                 C.Save();
             }
             ImGuiX.IndentedTextColored("Automatically closes the PurifyResult window when done reducing.".Loc());
+
+            var purifyAutomatic = C.AetherialReductionAutomatic;
+            if (ImGui.Checkbox("PurifyResult (Automatic)".Loc(), ref purifyAutomatic))
+            {
+                C.AetherialReductionAutomatic = purifyAutomatic;
+                C.Save();
+            }
+            ImGuiX.IndentedTextColored("Press the game's own Automatic button on the PurifyResult window, so the game reduces every remaining item by itself. You still reduce the first item yourself.".Loc());
         }
 
         #endregion
