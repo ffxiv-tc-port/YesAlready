@@ -309,7 +309,37 @@ public static class Bothers
                 C.LotteryWeeklyInput = lotto;
                 C.Save();
             }
-            ImGuiX.IndentedTextColored("Automatically purchase a Jumbo Cactpot ticket with a random number.".Loc());
+            ImGuiX.IndentedTextColored("Automatically purchase a Jumbo Cactpot ticket when the number entry window opens.".Loc());
+
+            if (C.LotteryWeeklyInput)
+            {
+                using var indent = ImRaii.PushIndent();
+
+                var randomMode = C.LotteryWeeklyNumberMode == Configuration.JumboCactpotNumberMode.Random;
+                if (ImGui.RadioButton("Random number".Loc(), randomMode))
+                {
+                    C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Random;
+                    C.Save();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.RadioButton("Fixed number".Loc(), !randomMode))
+                {
+                    C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Fixed;
+                    C.Save();
+                }
+
+                if (!randomMode)
+                {
+                    var fixedNumber = C.LotteryWeeklyFixedNumber;
+                    ImGui.SetNextItemWidth(100);
+                    if (ImGui.InputInt("Number (0-9999)".Loc(), ref fixedNumber))
+                    {
+                        C.LotteryWeeklyFixedNumber = Math.Clamp(fixedNumber, 0, 9999);
+                        C.Save();
+                    }
+                }
+            }
 
             // 19. HWDLottery
             var kupo = C.KupoOfFortune;

@@ -62,6 +62,12 @@ public partial class Configuration() : IPluginConfiguration
     public bool AutoCollectable { get; set; } = false;
     public bool LotteryWeeklyInput { get; set; } = false;
 
+    /// <summary>夢幻彩券的號碼來源；預設維持原本的隨機，改動不影響既有使用者。</summary>
+    public JumboCactpotNumberMode LotteryWeeklyNumberMode { get; set; } = JumboCactpotNumberMode.Random;
+
+    /// <summary><see cref="JumboCactpotNumberMode.Fixed"/> 時使用的號碼（0–9999）。</summary>
+    public int LotteryWeeklyFixedNumber { get; set; } = 0;
+
     public bool TradeMultiple { get; set; } = false;
     public TradeMultipleMode TransmuteMode { get; set; } = TradeMultipleMode.AllSame;
     public bool KupoOfFortune { get; set; } = false;
@@ -88,6 +94,16 @@ public partial class Configuration() : IPluginConfiguration
         public bool UpdateState { get; set; } = true;
         public string CallbackParams { get; set; } = string.Empty;
         public bool Enabled { get; set; } = true;
+    }
+
+    /// <summary>夢幻彩券的號碼來源。</summary>
+    public enum JumboCactpotNumberMode
+    {
+        /// <summary>每次隨機（原本唯一的行為）。</summary>
+        Random = 0,
+
+        /// <summary>固定使用 <see cref="Configuration.LotteryWeeklyFixedNumber"/>。</summary>
+        Fixed = 1,
     }
 
     public enum TradeMultipleMode
