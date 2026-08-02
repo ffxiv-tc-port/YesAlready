@@ -32,13 +32,13 @@ internal class SelectYesno : TextMatchingFeature
             return new TextEntryNode { IsYes = true };
         }
 
-        if (C.PartyFinderJoinConfirm && GenericHelpers.TryGetAddonByName<AtkUnitBase>("LookingForGroupDetail", out var _) && lfgPatterns.Any(r => r.IsMatch(text)))
+        if (C.PartyFinderJoinConfirm && GenericHelpers.TryGetAddonByName<AtkUnitBase>("LookingForGroupDetail", out var _) && IsPartyJoinPrompt(text))
         {
             Log($"Entry is party finder join confirmation");
             return new TextEntryNode { IsYes = true };
         }
 
-        if (C.AutoCollectable && collectablePatterns.Any(text.Contains))
+        if (C.AutoCollectable && IsCollectablePrompt(text))
         {
             Log($"Entry is collectable");
             var name = Enum.GetValues<SeIconChar>().Cast<SeIconChar>().Aggregate(atk->AtkValues[15].String.AsDalamudSeString().GetText(), (current, enumValue) => current.Replace(enumValue.ToIconString(), "")).Trim();
@@ -108,21 +108,55 @@ internal class SelectYesno : TextMatchingFeature
             new AddonMaster.SelectYesno(atk).No();
     }
 
+    /// <summary>
+    /// Addon#120＝「確定要加入&lt;名字&gt;的小隊嗎？」（EN "Join &lt;name&gt;'s party?"）。
+    /// 這是玩家點下招募看板的加入鈕時跳出來的那句。
+    /// </summary>
+    private const uint PartyJoinAddonRow = 120;
+
+    /// <summary>
+    /// Addon#1056＝「收藏價值」（EN "Collectability" / JA「収集価値」/ DE "Sammlerwert" /
+    /// FR "Valeur de collection"）。收藏品交出的確認句 Addon#156 是
+    /// 「&lt;道具&gt;的收藏價值為&lt;數字&gt;，確定要降低品質變換成以下道具嗎？」，一定含這個詞。
+    /// </summary>
+    private const uint CollectabilityAddonRow = 1056;
+
+    /// <summary>
+    /// 原本只靠寫死的四國語言 regex 比對，台服（以及韓、簡）永遠對不上——比對失敗是完全靜默的，
+    /// 症狀只是「沒有自動點」。主要判斷改成直接讀遊戲自己的 Addon 表，語言由客戶端決定，不需要
+    /// 為每個新語言補 pattern；舊清單留著一起 OR，萬一列號日後被官方挪動也不會讓原本能動的
+    /// 四種語言跟著壞掉。⚠️ <see cref="GenericHelpers.ContainsPartOf"/> 是大小寫敏感的，但這裡
+    /// 兩邊都來自同一張表所以不受影響。
+    /// </summary>
+    private static bool IsPartyJoinPrompt(string text)
+        => GenericHelpers.GetRow<Addon>(PartyJoinAddonRow) is { } row && !row.Text.IsEmpty && text.ContainsPartOf(row.Text)
+            || lfgPatterns.Any(r => r.IsMatch(text));
+
+    /// <summary>
+    /// 同上，改讀 Addon#1056。⚠️ 英文的確認句寫的是小寫的 "collectability of"，而表裡的標籤是
+    /// 大寫開頭的 "Collectability"，所以這裡一定要忽略大小寫比對，不能用
+    /// <see cref="GenericHelpers.ContainsPartOf"/>。
+    /// </summary>
+    private static bool IsCollectablePrompt(string text)
+        => GenericHelpers.GetRow<Addon>(CollectabilityAddonRow)?.Text.GetText() is { Length: > 0 } label
+            && text.Contains(label, StringComparison.OrdinalIgnoreCase)
+            || collectablePatterns.Any(p => text.Contains(p, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Addon#<see cref="PartyJoinAddonRow"/> 之外的後備比對。</summary>
     private static readonly List<Regex> lfgPatterns =
     [
         new Regex(@"Join .* party\?"),
         new Regex(@".*のパーティに参加します。よろしいですか？"),
         new Regex(@"Der Gruppe von .* beitreten\?"),
         new Regex(@"Rejoindre l'équipe de .*\?")
-        // if someone could add the chinese and korean translations that'd be nice
     ];
 
-    private readonly List<string> collectablePatterns =
+    /// <summary>Addon#<see cref="CollectabilityAddonRow"/> 之外的後備比對。</summary>
+    private static readonly List<string> collectablePatterns =
     [
         "collectability of",
         "収集価値",
         "Sammlerwert",
         "Valeur de collection"
-        // if someone could add the chinese and korean translations that'd be nice
     ];
 }

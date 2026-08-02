@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Plugin.Services;
 using ECommons.GameHelpers;
 using Lumina.Excel.Sheets;
 using System;
@@ -9,10 +10,26 @@ namespace YesAlready.BaseFeatures;
 
 public abstract class TextMatchingFeature : AddonFeature
 {
+    /// <summary>
+    /// PostSetup 時視窗還沒準備好的話，最多再等這麼多畫格。60 畫格約 1 秒，足以涵蓋
+    /// 「Setup 完成但同一幀還沒 Show」的空窗，又不會在真的永遠不顯示的視窗上纏太久。
+    /// </summary>
+    private const int ReadyRetryFrames = 60;
+
+    private string? _retryAddonName;
+    private int _retryFramesLeft;
+    private bool _retrySubscribed;
+
     protected override bool IsEnabled() => true;
     protected abstract unsafe string GetSetLastSeenText(AtkUnitBase* atk);
     protected abstract unsafe object? ShouldProceed(string text, AtkUnitBase* atk);
     protected abstract unsafe void Proceed(AtkUnitBase* atk, object? matchingNode = null);
+
+    public override void Disable()
+    {
+        CancelRetry();
+        base.Disable();
+    }
 
     protected override unsafe void HandleAddonEvent(AddonEvent eventType, AddonArgs addonInfo, AtkUnitBase* atk)
     {
@@ -28,9 +45,22 @@ public abstract class TextMatchingFeature : AddonFeature
         {
             if (addonInfo.AddonName is "Talk") return; // don't bother logging this
             Log("Addon not ready");
+
+            // PostSetup 只會來一次。以前這裡直接 return，視窗只要在 Setup 當下還沒被 Show
+            // （道具交易的確認框實測就是這樣），這個對話框就再也不會被檢查一次——沒有錯誤、
+            // 沒有訊息，症狀只是「沒有自動點」。改成掛在畫格更新上重試，並且每次都用名稱
+            // 重新解析位址，絕不跨幀保存原生指標。
+            if (eventType is AddonEvent.PostSetup)
+                ScheduleRetry(addonInfo.AddonName);
             return;
         }
 
+        CancelRetry();
+        Process(atk);
+    }
+
+    private unsafe void Process(AtkUnitBase* atk)
+    {
         var text = GetSetLastSeenText(atk);
         Log($"text={text}");
 
@@ -41,6 +71,46 @@ public abstract class TextMatchingFeature : AddonFeature
         }
         else
             Log("Not proceeding");
+    }
+
+    private void ScheduleRetry(string addonName)
+    {
+        _retryAddonName = addonName;
+        _retryFramesLeft = ReadyRetryFrames;
+        if (_retrySubscribed) return;
+        Svc.Framework.Update += OnRetryTick;
+        _retrySubscribed = true;
+    }
+
+    private void CancelRetry()
+    {
+        _retryAddonName = null;
+        if (!_retrySubscribed) return;
+        Svc.Framework.Update -= OnRetryTick;
+        _retrySubscribed = false;
+    }
+
+    private unsafe void OnRetryTick(IFramework framework)
+    {
+        if (_retryAddonName is not { } addonName || !P.Active)
+        {
+            CancelRetry();
+            return;
+        }
+
+        if (--_retryFramesLeft < 0)
+        {
+            Log($"Gave up waiting for {addonName} to become ready");
+            CancelRetry();
+            return;
+        }
+
+        if (!GenericHelpers.TryGetAddonByName<AtkUnitBase>(addonName, out var atk) || atk == null) return;
+        if (!GenericHelpers.IsAddonReady(atk)) return;
+
+        Log($"Addon became ready after {ReadyRetryFrames - _retryFramesLeft} frame(s)");
+        CancelRetry();
+        Process(atk);
     }
 
     protected bool EntryMatchesText(string pattern, string text, bool isRegex)
