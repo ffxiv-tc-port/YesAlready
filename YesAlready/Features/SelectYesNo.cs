@@ -41,7 +41,18 @@ internal class SelectYesno : TextMatchingFeature
         if (C.AutoCollectable && IsCollectablePrompt(text))
         {
             Log($"Entry is collectable");
-            var name = Enum.GetValues<SeIconChar>().Cast<SeIconChar>().Aggregate(atk->AtkValues[15].String.AsDalamudSeString().GetText(), (current, enumValue) => current.Replace(enumValue.ToIconString(), "")).Trim();
+
+            // 🔴 AtkValues 的長度恰為 AtkValuesCount，越界讀到的是堆積垃圾**不是 null** ⇒ 判空擋不住。
+            // 這一格是字串指標，越界時等於拿任意 8 bytes 當 char* 解參考 → 攔不到的 AVE
+            // （corrupted-state exception，try/catch 無效）。原本還在 :83 又裸讀了同一格一次。
+            // 讀不到就把名稱當空字串：下面的 FindRow 比對必然落空 → 走既有的「配對失敗」分支，
+            // 再往下掉回一般的 TextEntryNode 比對迴圈，控制流跟「這個對話框沒有收藏品名稱」一致。
+            var itemNameValue = AtkValueSafety.Get(atk, 15);
+            if (itemNameValue == null)
+                PluginLog.Information($"[{nameof(SelectYesno)}] AtkValues 只有 {AtkValueSafety.CountOf(atk)} 格（需要 16），跳過收藏品名稱判定");
+
+            var rawName = itemNameValue == null ? string.Empty : itemNameValue->String.AsDalamudSeString().GetText();
+            var name = Enum.GetValues<SeIconChar>().Cast<SeIconChar>().Aggregate(rawName, (current, enumValue) => current.Replace(enumValue.ToIconString(), "")).Trim();
             if (GenericHelpers.FindRow<Item>(x => x.IsCollectable && !x.Singular.IsEmpty && name.Contains(x.Singular.GetText(), StringComparison.InvariantCultureIgnoreCase)) is { RowId: > 0 } item)
             {
                 Log($"Detected item [{item}] {item.Name}");
@@ -80,7 +91,7 @@ internal class SelectYesno : TextMatchingFeature
                 }
             }
             else
-                Log($"Failed to match any collectable to {name} [original={atk->AtkValues[15].String}]");
+                Log($"Failed to match any collectable to {name} [original={rawName}]");
         }
 
         var nodes = C.GetAllNodes().OfType<TextEntryNode>();
