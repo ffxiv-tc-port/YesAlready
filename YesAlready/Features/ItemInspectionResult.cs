@@ -33,7 +33,13 @@ internal class ItemInspectionResult : AddonFeature
                 return;
             }
 
-            if (am.NextButton->IsEnabled)
+            // 🔴 IsEnabled 解的是 OwnerNode(不是 AtkResNode),兩者都可能是 null。
+            // 這裡是三態:可按→下一件、不可按→關窗、「讀不出來」→這次不做事,等下一次事件再說。
+            // 讀不出來時不能落到 Close(),那會把「不知道」當成「已確認不可按」。
+            var nextButton = am.NextButton;
+            if (nextButton == null || nextButton->OwnerNode == null) return;
+
+            if (nextButton->IsEnabled)
                 am.Next();
             else
                 am.Close();

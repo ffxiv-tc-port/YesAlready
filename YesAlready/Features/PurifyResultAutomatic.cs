@@ -33,9 +33,11 @@ internal class PurifyResultAutomatic : AddonFeature
 
         var master = new AddonMaster.PurifyResult(atk);
 
-        // ⚠️ ECommons 的 ClickButtonIfEnabled 不做 null 檢查，節點不在就會解參考空指標
-        if (master.AutomaticButton == null) return;
-        if (!master.AutomaticButton->IsEnabled) return;
+        // ⚠️ 節點不在就會解參考空指標。AutomaticButton 是每次都重查的屬性，取兩次等於 TOCTOU，
+        // 先快取成區域變數；IsComponentEnabled 會一路擋掉 button／OwnerNode 的 null
+        // （IsEnabled 解的是 OwnerNode，不是 AtkResNode），任一層讀不出來就當成「這次不做事」。
+        var automaticButton = master.AutomaticButton;
+        if (!GenericHelpers.IsComponentEnabled(automaticButton)) return;
 
         // PostUpdate 每幀都會進來；按鈕按下後到視窗換掉之間會有數幀空窗
         if (!EzThrottler.Throttle("YesAlready.PurifyResultAutomatic", 1000)) return;

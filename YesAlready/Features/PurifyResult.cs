@@ -20,8 +20,10 @@ internal class PurifyResult : AddonFeature
             // 再照原本的行為關窗。
             if (C.AetherialReductionAutomatic)
             {
+                // IsComponentEnabled 連 OwnerNode 一起擋(IsEnabled 解的是 OwnerNode 不是 AtkResNode);
+                // 任一層是 null 就回 false,與原本 automaticButton == null 時的流向一致。
                 var automaticButton = new AddonMaster.PurifyResult(atk).AutomaticButton;
-                if (automaticButton != null && automaticButton->IsEnabled) return;
+                if (GenericHelpers.IsComponentEnabled(automaticButton)) return;
             }
 
             PluginLog.Debug("Closing Purify Results menu");
