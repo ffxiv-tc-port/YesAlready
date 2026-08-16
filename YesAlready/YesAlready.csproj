@@ -5,6 +5,19 @@
 		<LangVersion>preview</LangVersion>
 		<AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
 		<DalamudLibPath>$(appdata)\FFXIVSimpleLauncher\Dalamud\Injector\</DalamudLibPath>
+
+		<!-- 🔴 建 YesAlready.sln 時,MSBuild 預設會把 Configuration/Platform 從 ProjectReference
+		     上「解掉」(ShouldUnsetParentConfigurationAndPlatform,預設值只在 BuildingSolutionFile
+		     或 BuildingInsideVisualStudio 為真時才是 true),改由方案的組態對應表決定子專案要建
+		     哪個組態。ECommons 是子模組、沒有被收進 YesAlready.sln(方案裡只有 YesAlready 一個
+		     專案),AssignProjectConfiguration 查不到對應就退回它自己的預設值 Debug —— 於是
+		     `dotnet build YesAlready.sln -c Release` 會把 **Debug 版**的 ECommons.dll 複製進
+		     YesAlready/bin/Release/,而建置本身 0 error、完全沒有徵兆。
+		     ⚠️ 在 ProjectReference 上寫 SetConfiguration 沒有用:AssignProjectConfiguration 會
+		     覆寫掉那份 metadata。
+		     直接建 .csproj 時這個屬性本來就預設 false,所以這對 CI 與發版路徑(兩者都是直接建
+		     .csproj)是 no-op。 -->
+		<ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
 	</PropertyGroup>
 
 	<PropertyGroup>
