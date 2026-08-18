@@ -70,7 +70,7 @@ public class Watcher : IDisposable
             EscapeTargetName = target != null ? target.Name.GetText() : string.Empty;
         }
 
-        if (Svc.Targets.Target is { DataId: var id })
+        if (Svc.Targets.Target is { BaseId: var id })
         {
             if (id != _lastTargetId)
                 Service.Watcher.LastSelectedListEntry = null;
