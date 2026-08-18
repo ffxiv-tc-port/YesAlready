@@ -150,23 +150,29 @@ public unsafe class ReaderSatisfactionSupply(AtkUnitBase* UnitBase, int BeginOff
 
     public bool WillItemOvercap(AgentSatisfactionSupply.ItemInfo item, Action<string> log)
     {
+        // CurrencyManager.Instance() 在 CS 裡是 [StaticAddress(..., isPointer: true)] —— 讀的是「指標的位址」,
+        // 遊戲還沒把那個管理器配起來時真的會回 null,解參考就是攔不到的 AVE。
+        // 這一支原本在同一個方法裡裸呼叫十二次(六行、每行兩次),改成取一次本地指標、判空後重用。
+        var currency = CurrencyManager.Instance();
+        if (currency == null)
+            throw new Exception("CurrencyManager unavailable; cannot tell whether the reward would overcap");
         if (GetItem(item.Id) is { SpiritbondOrCollectability: var collectability })
         {
             log($"Checking overcap for item #{item.Id} with collectability {collectability}");
             if (collectability > item.Collectability3)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[2]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[2]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[2] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[2];
+                log($"Item #{item.Id} [{item.Reward1Quantity[2]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[2]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[2] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[2];
             }
             if (collectability > item.Collectability2)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[1]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[1]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[1] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[1];
+                log($"Item #{item.Id} [{item.Reward1Quantity[1]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[1]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[1] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[1];
             }
             if (collectability > item.Collectability1)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[0]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[0]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[0] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[0];
+                log($"Item #{item.Id} [{item.Reward1Quantity[0]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[0]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[0] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[0];
             }
         }
         throw new Exception($"Failed to find item [{item.Id}] in inventory");
