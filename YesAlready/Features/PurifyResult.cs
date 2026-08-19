@@ -13,7 +13,11 @@ internal class PurifyResult : AddonFeature
     {
         if (!GenericHelpers.IsAddonReady(atk)) return;
 
-        if (MemoryHelper.ReadSeString(&atk->GetTextNodeById(2)->NodeText).GetText() == Svc.Data.GetExcelSheet<Addon>().GetRow(2171).Text)   // 原為 First(x => x.RowId == 2171):O(n) 全表掃描找主鍵,GetRow 是索引查詢
+        // GetTextNodeById(2) 找不到節點合法回 null——&null->NodeText 是 0xC0 毒指標,ReadSeString 的判空擋不住。
+        var titleNode = atk->GetTextNodeById(2);
+        if (titleNode == null) return;
+
+        if (MemoryHelper.ReadSeString(&titleNode->NodeText).GetText() == Svc.Data.GetExcelSheet<Addon>().GetRow(2171).Text)   // 原為 First(x => x.RowId == 2171):O(n) 全表掃描找主鍵,GetRow 是索引查詢
         {
             // 「自動精選」也開著的時候，這個視窗還留著就是為了讓 PurifyResultAutomatic 去按那顆
             // 「自動」鈕；先關掉視窗會讓自動精選永遠按不到。等按鈕不再可按（沒東西可自動了）
