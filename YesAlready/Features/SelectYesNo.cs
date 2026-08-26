@@ -1,6 +1,8 @@
 using Dalamud.Game.Text;
+using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Utility;
 using Lumina.Excel.Sheets;
+using Lumina.Text.ReadOnly;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -136,12 +138,58 @@ internal class SelectYesno : TextMatchingFeature
     /// 原本只靠寫死的四國語言 regex 比對，台服（以及韓、簡）永遠對不上——比對失敗是完全靜默的，
     /// 症狀只是「沒有自動點」。主要判斷改成直接讀遊戲自己的 Addon 表，語言由客戶端決定，不需要
     /// 為每個新語言補 pattern；舊清單留著一起 OR，萬一列號日後被官方挪動也不會讓原本能動的
-    /// 四種語言跟著壞掉。⚠️ <see cref="GenericHelpers.ContainsPartOf"/> 是大小寫敏感的，但這裡
-    /// 兩邊都來自同一張表所以不受影響。
+    /// 四種語言跟著壞掉。
+    /// <para>
+    /// 🔴 這裡刻意**不用** <see cref="GenericHelpers.ContainsPartOf"/>：它是 any-match，
+    /// needle 的任何一個文字片段命中就回 true。台服 Addon#120「確定要加入UNKNOWN的小隊嗎？」
+    /// 被 placeholder 切成「確定要加入」＋「的小隊嗎？」兩段，光靠前半段就會在另外三句上誤中：
+    /// #10213「確定要加入新人頻道？」、#12945 與 #12973「確定要加入「（同好會名）」嗎？」。
+    /// 那三句都不是小隊邀請，自動按「是」等於替使用者加入新人頻道或同好會。
+    /// 改用 <see cref="ContainsAllPartsInOrder"/> 要求全部片段依序命中。
+    /// </para>
+    /// ⚠️ 兩者都是大小寫敏感的，但這裡 needle 與 haystack 都出自遊戲同一份語言資料所以不受影響。
     /// </summary>
     private static bool IsPartyJoinPrompt(string text)
-        => GenericHelpers.GetRow<Addon>(PartyJoinAddonRow) is { } row && !row.Text.IsEmpty && text.ContainsPartOf(row.Text)
+        => GenericHelpers.GetRow<Addon>(PartyJoinAddonRow) is { } row && !row.Text.IsEmpty && ContainsAllPartsInOrder(text, row.Text)
             || lfgPatterns.Any(r => r.IsMatch(text));
+
+    /// <summary>
+    /// Addon 表的句子含 placeholder（玩家名、同好會名之類），拆掉之後剩下若干段固定文字。
+    /// 這個函式要求 <paramref name="haystack"/> **依序含有全部片段**才算命中，
+    /// 也就是 all-match，而不是 <see cref="GenericHelpers.ContainsPartOf"/> 的 any-match。
+    /// <para>
+    /// 「依序」比「每段各自 Contains」嚴格：找到第 n 段之後，第 n+1 段只從該段結尾之後繼續找，
+    /// 所以片段順序顛倒的句子不會算命中——這正好還原 placeholder 原本的位置關係。
+    /// </para>
+    /// <para>
+    /// ⚠️ 片段必須維持 payload 的原始順序，**不可以像 ECommons 那樣依長度排序**：
+    /// 那是 any-match 為了「先試最長的」才做的，對依序比對會直接算出錯的答案。
+    /// </para>
+    /// </summary>
+    /// <param name="haystack">遊戲當下顯示的對話框文字。</param>
+    /// <param name="needle">Addon 表裡的樣板句。</param>
+    private static bool ContainsAllPartsInOrder(string haystack, ReadOnlySeString needle)
+    {
+        var fragments = needle.ToDalamudString().Payloads
+            .OfType<TextPayload>()
+            .Select(p => p.Text ?? string.Empty)
+            .Where(t => t.Trim().Length > 0)
+            .ToArray();
+
+        // 一段固定文字都沒有＝這句樣板整句都是 placeholder，比不出東西來。
+        // 回 true 會變成「任何對話框都命中」，所以這裡一定要回 false。
+        if (fragments.Length == 0) return false;
+
+        var cursor = 0;
+        foreach (var fragment in fragments)
+        {
+            var at = haystack.IndexOf(fragment, cursor, StringComparison.Ordinal);
+            if (at < 0) return false;
+            cursor = at + fragment.Length;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// 同上，改讀 Addon#1056。⚠️ 英文的確認句寫的是小寫的 "collectability of"，而表裡的標籤是
