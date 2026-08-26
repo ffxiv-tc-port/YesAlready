@@ -1,4 +1,5 @@
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System;
 using System.Collections.Generic;
@@ -42,7 +43,7 @@ public class CoreTab : BaseTab
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, newStyle);
 
         // Add new entry button with type selection
-        if (ImGui.Button("Add New"))
+        if (ImGui.Button("Add New".Loc()))
         {
             ImGui.OpenPopup("AddNewEntry");
         }
@@ -50,7 +51,7 @@ public class CoreTab : BaseTab
 
         // Add last seen button with preview
         ImGui.SameLine();
-        if (ImGui.Button("Add Last Seen"))
+        if (ImGui.Button("Add Last Seen".Loc()))
         {
             ImGui.OpenPopup("AddLastSeen");
         }
@@ -58,7 +59,7 @@ public class CoreTab : BaseTab
 
         // Add folder button
         ImGui.SameLine();
-        if (ImGui.Button("Add Folder"))
+        if (ImGui.Button("Add Folder".Loc()))
         {
 
         }
@@ -73,11 +74,11 @@ public class CoreTab : BaseTab
 
         // Filter toggles
         ImGui.SameLine();
-        if (ImGui.Checkbox("Show Enabled", ref showEnabled)) { }
+        if (ImGui.Checkbox("Show Enabled".Loc(), ref showEnabled)) { }
         ImGui.SameLine();
-        if (ImGui.Checkbox("Show Disabled", ref showDisabled)) { }
+        if (ImGui.Checkbox("Show Disabled".Loc(), ref showDisabled)) { }
         ImGui.SameLine();
-        if (ImGui.Checkbox("Show Invalid", ref showInvalid)) { }
+        if (ImGui.Checkbox("Show Invalid".Loc(), ref showInvalid)) { }
 
         DrawHelpButton();
     }
@@ -103,31 +104,31 @@ public class CoreTab : BaseTab
     {
         if (ImGui.BeginPopup("AddNewEntry"))
         {
-            if (ImGui.Selectable("Yes/No Dialog"))
+            if (ImGui.Selectable("Yes/No Dialog".Loc()))
             {
                 var newNode = new TextEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.RootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("OK Dialog"))
+            if (ImGui.Selectable("OK Dialog".Loc()))
             {
                 var newNode = new OkEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.OkRootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("List Selection"))
+            if (ImGui.Selectable("List Selection".Loc()))
             {
                 var newNode = new ListEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.ListRootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("Talk Dialog"))
+            if (ImGui.Selectable("Talk Dialog".Loc()))
             {
                 var newNode = new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" };
                 C.TalkRootFolder.Children.Add(newNode);
                 C.Save();
             }
-            if (ImGui.Selectable("Numeric Input"))
+            if (ImGui.Selectable("Numeric Input".Loc()))
             {
                 var newNode = new NumericsEntryNode { Enabled = false, Text = "Your text goes here" };
                 C.NumericsRootFolder.Children.Add(newNode);
@@ -141,9 +142,9 @@ public class CoreTab : BaseTab
     {
         if (ImGui.BeginPopup("AddLastSeen"))
         {
-            ImGui.Text("Select type and preview:");
+            ImGui.Text("Select type and preview:".Loc());
 
-            if (ImGui.CollapsingHeader("Yes/No Dialogs"))
+            if (ImGui.CollapsingHeader("Yes/No Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenDialogText))
                 {
@@ -157,7 +158,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("OK Dialogs"))
+            if (ImGui.CollapsingHeader("OK Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenOkText))
                 {
@@ -171,7 +172,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("List Dialogs"))
+            if (ImGui.CollapsingHeader("List Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenListSelection))
                 {
@@ -185,7 +186,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("Talk Dialogs"))
+            if (ImGui.CollapsingHeader("Talk Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenTalkTarget))
                 {
@@ -199,7 +200,7 @@ public class CoreTab : BaseTab
                 }
             }
 
-            if (ImGui.CollapsingHeader("Numeric Dialogs"))
+            if (ImGui.CollapsingHeader("Numeric Dialogs".Loc()))
             {
                 if (ImGui.Selectable(Service.Watcher.LastSeenNumericsText))
                 {
@@ -235,27 +236,27 @@ public class CoreTab : BaseTab
 
     private void DrawByTypeView()
     {
-        if (ImGui.CollapsingHeader("Yes/No Dialogs", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Yes/No Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.RootFolder, () => new TextEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
 
-        if (ImGui.CollapsingHeader("OK Dialogs", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("OK Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.OkRootFolder, () => new OkEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
 
-        if (ImGui.CollapsingHeader("List Dialogs", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("List Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.ListRootFolder, () => new ListEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
 
-        if (ImGui.CollapsingHeader("Talk Dialogs", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Talk Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.TalkRootFolder, () => new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" });
         }
 
-        if (ImGui.CollapsingHeader("Numeric Dialogs", ImGuiTreeNodeFlags.DefaultOpen))
+        if (ImGui.CollapsingHeader("Numeric Dialogs".Loc(), ImGuiTreeNodeFlags.DefaultOpen))
         {
             DisplayNodes(C.NumericsRootFolder, () => new NumericsEntryNode() { Enabled = false, Text = "Add some text here!" });
         }
@@ -318,18 +319,18 @@ public class CoreTab : BaseTab
     private string GetHelpText()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Core features for YesAlready:");
+        sb.AppendLine("Core features for YesAlready:".Loc());
         sb.AppendLine();
-        sb.AppendLine("View Modes:");
-        sb.AppendLine("  - By Type: Groups entries by their dialog type");
-        sb.AppendLine("  - Alphabetical: Simple alphabetical list");
-        sb.AppendLine("  - Folders: Current folder structure");
+        sb.AppendLine("View Modes:".Loc());
+        sb.AppendLine("  - " + "By Type: Groups entries by their dialog type".Loc());
+        sb.AppendLine("  - " + "Alphabetical: Simple alphabetical list".Loc());
+        sb.AppendLine("  - " + "Folders: Current folder structure".Loc());
         sb.AppendLine();
-        sb.AppendLine("Features:");
-        sb.AppendLine("  - Add new entry: Create a new entry of any type");
-        sb.AppendLine("  - Add last seen: Add from recently seen dialogs");
-        sb.AppendLine("  - Search: Filter entries by name or text");
-        sb.AppendLine("  - Show/Hide: Toggle visibility of enabled/disabled/invalid entries");
+        sb.AppendLine("Features:".Loc());
+        sb.AppendLine("  - " + "Add new entry: Create a new entry of any type".Loc());
+        sb.AppendLine("  - " + "Add last seen: Add from recently seen dialogs".Loc());
+        sb.AppendLine("  - " + "Search: Filter entries by name or text".Loc());
+        sb.AppendLine("  - " + "Show/Hide: Toggle visibility of enabled/disabled/invalid entries".Loc());
         return sb.ToString();
     }
 }

@@ -1,4 +1,5 @@
 using Dalamud.Interface;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -14,7 +15,7 @@ public static class Lists
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new ListEntryNode { Enabled = false, Text = "Your text goes here" };
             ListRootFolder.Children.Add(newNode);
@@ -22,7 +23,7 @@ public static class Lists
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last selected as new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last selected as new entry".Loc()))
         {
             var newNode = new ListEntryNode { Enabled = true, Text = Service.Watcher.LastSeenListSelection, TargetRestricted = true, TargetText = Service.Watcher.LastSeenListTarget };
             ListRootFolder.Children.Add(newNode);
@@ -30,7 +31,7 @@ public static class Lists
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder".Loc()))
         {
             var newNode = new TextFolderNode { Name = "Untitled folder" };
             ListRootFolder.Children.Add(newNode);
@@ -38,19 +39,19 @@ public static class Lists
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("Enter into the input all or part of the text inside a line in a list dialog.");
-        sb.AppendLine("For example: \"Purchase a Mini Cactpot ticket\" in the Gold Saucer.");
+        sb.AppendLine("Enter into the input all or part of the text inside a line in a list dialog.".Loc());
+        sb.AppendLine("For example: \"Purchase a Mini Cactpot ticket\" in the Gold Saucer.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.");
-        sb.AppendLine("As such: \"/Purchase a .*? ticket/\"");
+        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.".Loc());
+        sb.AppendLine("As such: \"/Purchase a .*? ticket/\"".Loc());
         sb.AppendLine();
-        sb.AppendLine("If any line in the list matches, then that line will be chosen.");
+        sb.AppendLine("If any line in the list matches, then that line will be chosen.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Right click a line to view options.");
-        sb.AppendLine("Double click an entry for quick enable/disable.");
-        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.");
+        sb.AppendLine("Right click a line to view options.".Loc());
+        sb.AppendLine("Double click an entry for quick enable/disable.".Loc());
+        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Currently supported list addons:");
+        sb.AppendLine("Currently supported list addons:".Loc());
         sb.AppendLine("  - SelectString");
         sb.AppendLine("  - SelectIconString");
 
@@ -79,11 +80,11 @@ public static class Lists
             ImGui.PopStyleColor();
 
         if (!validRegex && !validTarget)
-            ImGuiX.TextTooltip("Invalid Text and Target Regex");
+            ImGuiX.TextTooltip("Invalid Text and Target Regex".Loc());
         else if (!validRegex)
-            ImGuiX.TextTooltip("Invalid Text Regex");
+            ImGuiX.TextTooltip("Invalid Text Regex".Loc());
         else if (!validTarget)
-            ImGuiX.TextTooltip("Invalid Target Regex");
+            ImGuiX.TextTooltip("Invalid Target Regex".Loc());
 
         if (ImGui.IsItemHovered())
         {
@@ -122,7 +123,7 @@ public static class Lists
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -131,7 +132,7 @@ public static class Lists
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
@@ -148,7 +149,7 @@ public static class Lists
         }
 
         var targetRestricted = node.TargetRestricted;
-        if (ImGui.Checkbox("Target Restricted", ref targetRestricted))
+        if (ImGui.Checkbox("Target Restricted".Loc(), ref targetRestricted))
         {
             node.TargetRestricted = targetRestricted;
             C.Save();
@@ -157,7 +158,7 @@ public static class Lists
         var searchPlusWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.SearchPlus);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchPlusWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current target"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current target".Loc()))
         {
             var target = Svc.Targets.Target;
             var name = target?.Name?.TextValue ?? string.Empty;

@@ -4,6 +4,7 @@ using Dalamud.Plugin;
 using ECommons.EzDTR;
 using ECommons.EzHookManager;
 using ECommons.GameHelpers;
+using ECommons.LanguageHelpers;
 using ECommons.SimpleGui;
 using ECommons.Singletons;
 using Lumina.Excel.Sheets;
@@ -32,6 +33,7 @@ public class YesAlready : IDalamudPlugin
     {
         P = this;
         ECommonsMain.Init(pluginInterface, P);
+        ECommons.LanguageHelpers.Localization.Init("ChineseTraditional");
 
         C = Svc.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         C.Migrate();
@@ -41,10 +43,10 @@ public class YesAlready : IDalamudPlugin
         EzConfigGui.WindowSystem.AddWindow(new ZoneListWindow());
         EzConfigGui.WindowSystem.AddWindow(new ConditionsListWindow());
 
-        EzCmd.Add(Command, OnCommand, "Opens the plugin window.", int.MinValue);
+        EzCmd.Add(Command, OnCommand, "Opens the plugin window.".Loc(), int.MinValue);
         Aliases.Each(a => EzCmd.Add(a, OnCommand, $"{Command} alias"));
 
-        _ = new EzDtr(() => new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused" : "On") : "Off")}")), () => C.Enabled ^= true);
+        _ = new EzDtr(() => new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}")), () => C.Enabled ^= true);
 
         LoadTerritories();
         ToggleFeatures(true);
@@ -157,19 +159,19 @@ public class YesAlready : IDalamudPlugin
     private static void CommandHelpMenu()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Help menu");
-        sb.AppendLine($"{Command} - Toggle the config window.");
-        sb.AppendLine($"{Command} toggle - Toggle the plugin on/off.");
-        sb.AppendLine($"{Command} last - Add the last seen YesNo dialog.");
-        sb.AppendLine($"{Command} last no - Add the last seen YesNo dialog as a no.");
-        sb.AppendLine($"{Command} last zone - Add the last seen YesNo dialog with the current zone name.");
-        sb.AppendLine($"{Command} last zone no - Add the last seen YesNo dialog with the current zone name as a no.");
-        sb.AppendLine($"{Command} last zone folder - Add the last seen YesNo dialog with the current zone name in a folder with the current zone name.");
-        sb.AppendLine($"{Command} last zone folder no - Add the last seen YesNo dialog with the current zone name in a folder with the current zone name as a no.");
-        sb.AppendLine($"{Command} lastlist - Add the last selected list dialog with the target at the time.");
-        sb.AppendLine($"{Command} lasttalk - Add the last seen target during a Talk dialog.");
-        sb.AppendLine($"{Command} dutyconfirm - Toggle duty confirm.");
-        sb.AppendLine($"{Command} onetimeconfirm - Toggles duty confirm as well as one-time confirm.");
+        sb.AppendLine("Help menu".Loc());
+        sb.AppendLine($"{Command} - " + "Toggle the config window.".Loc());
+        sb.AppendLine($"{Command} toggle - " + "Toggle the plugin on/off.".Loc());
+        sb.AppendLine($"{Command} last - " + "Add the last seen YesNo dialog.".Loc());
+        sb.AppendLine($"{Command} last no - " + "Add the last seen YesNo dialog as a no.".Loc());
+        sb.AppendLine($"{Command} last zone - " + "Add the last seen YesNo dialog with the current zone name.".Loc());
+        sb.AppendLine($"{Command} last zone no - " + "Add the last seen YesNo dialog with the current zone name as a no.".Loc());
+        sb.AppendLine($"{Command} last zone folder - " + "Add the last seen YesNo dialog with the current zone name in a folder with the current zone name.".Loc());
+        sb.AppendLine($"{Command} last zone folder no - " + "Add the last seen YesNo dialog with the current zone name in a folder with the current zone name as a no.".Loc());
+        sb.AppendLine($"{Command} lastlist - " + "Add the last selected list dialog with the target at the time.".Loc());
+        sb.AppendLine($"{Command} lasttalk - " + "Add the last seen target during a Talk dialog.".Loc());
+        sb.AppendLine($"{Command} dutyconfirm - " + "Toggle duty confirm.".Loc());
+        sb.AppendLine($"{Command} onetimeconfirm - " + "Toggles duty confirm as well as one-time confirm.".Loc());
         Svc.Chat.PrintPluginMessage(sb);
     }
 
@@ -186,7 +188,7 @@ public class YesAlready : IDalamudPlugin
         Configuration.CreateNode<TextEntryNode>(C.RootFolder, createFolder, zoneRestricted ? GenericHelpers.GetRow<TerritoryType>(Player.Territory)?.Name.ExtractText() : null, !selectNo);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new text entry.");
+        Svc.Chat.PrintPluginMessage("Added a new text entry.".Loc());
     }
 
     private void CommandAddOkNode(bool createFolder)
@@ -202,7 +204,7 @@ public class YesAlready : IDalamudPlugin
         Configuration.CreateNode<OkEntryNode>(C.RootFolder, createFolder);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new text entry.");
+        Svc.Chat.PrintPluginMessage("Added a new text entry.".Loc());
     }
 
     private void CommandAddListNode()
@@ -228,7 +230,7 @@ public class YesAlready : IDalamudPlugin
         parent.Children.Add(newNode);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new list entry.");
+        Svc.Chat.PrintPluginMessage("Added a new list entry.".Loc());
     }
 
     private void CommandAddTalkNode()
@@ -247,7 +249,7 @@ public class YesAlready : IDalamudPlugin
         parent.Children.Add(newNode);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new talk entry.");
+        Svc.Chat.PrintPluginMessage("Added a new talk entry.".Loc());
     }
 
     private void ToggleDutyConfirm()
@@ -256,8 +258,8 @@ public class YesAlready : IDalamudPlugin
         C.ContentsFinderOneTimeConfirmEnabled = false;
         C.Save();
 
-        var state = C.ContentsFinderConfirmEnabled ? "enabled" : "disabled";
-        Svc.Chat.PrintPluginMessage($"Duty Confirm {state}.");
+        var state = C.ContentsFinderConfirmEnabled ? "enabled".Loc() : "disabled".Loc();
+        Svc.Chat.PrintPluginMessage("Duty Confirm ??.".Loc(state));
     }
 
     private void ToggleOneTimeConfirm()
@@ -266,8 +268,8 @@ public class YesAlready : IDalamudPlugin
         C.ContentsFinderConfirmEnabled = C.ContentsFinderOneTimeConfirmEnabled;
         C.Save();
 
-        var state = C.ContentsFinderOneTimeConfirmEnabled ? "enabled" : "disabled";
-        Svc.Chat.PrintPluginMessage($"Duty Confirm and One Time Confirm {state}.");
+        var state = C.ContentsFinderOneTimeConfirmEnabled ? "enabled".Loc() : "disabled".Loc();
+        Svc.Chat.PrintPluginMessage("Duty Confirm and One Time Confirm ??.".Loc(state));
     }
 
     #endregion

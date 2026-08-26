@@ -1,4 +1,5 @@
 using Dalamud.Interface;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -14,7 +15,7 @@ public static class Talk
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" };
             TalkRootFolder.Children.Add(newNode);
@@ -22,7 +23,7 @@ public static class Talk
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add current target as a new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add current target as a new entry".Loc()))
         {
             var target = Svc.Targets.Target;
             if (target != null)
@@ -33,11 +34,11 @@ public static class Talk
                 C.Save();
             }
             else
-                Svc.Toasts.ShowError("Unable to add entry: no target selected.");
+                Svc.Toasts.ShowError("Unable to add entry: no target selected.".Loc());
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder".Loc()))
         {
             var newNode = new TextFolderNode { Name = "Untitled folder" };
             TalkRootFolder.Children.Add(newNode);
@@ -45,19 +46,19 @@ public static class Talk
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("Enter into the input all or part of the selected taret name while in a talk dialog.");
-        sb.AppendLine("For example: \"Moyce\" in the Crystarium.");
+        sb.AppendLine("Enter into the input all or part of the selected taret name while in a talk dialog.".Loc());
+        sb.AppendLine("For example: \"Moyce\" in the Crystarium.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.");
-        sb.AppendLine("As such: \"/(Moyce|Eirikur)/\"");
+        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.".Loc());
+        sb.AppendLine("As such: \"/(Moyce|Eirikur)/\"".Loc());
         sb.AppendLine();
-        sb.AppendLine("To skip your retainers, add the summoning bell.");
+        sb.AppendLine("To skip your retainers, add the summoning bell.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Right click a line to view options.");
-        sb.AppendLine("Double click an entry for quick enable/disable.");
-        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.");
+        sb.AppendLine("Right click a line to view options.".Loc());
+        sb.AppendLine("Double click an entry for quick enable/disable.".Loc());
+        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Currently supported list addons:");
+        sb.AppendLine("Currently supported list addons:".Loc());
         sb.AppendLine("  - Talk");
 
         ImGui.SameLine();
@@ -84,7 +85,7 @@ public static class Talk
             ImGui.PopStyleColor();
 
         if (!validTarget)
-            ImGuiX.TextTooltip("Invalid Target Regex");
+            ImGuiX.TextTooltip("Invalid Target Regex".Loc());
 
         if (ImGui.IsItemHovered())
         {
@@ -123,7 +124,7 @@ public static class Talk
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -132,7 +133,7 @@ public static class Talk
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
@@ -144,7 +145,7 @@ public static class Talk
         var searchPlusWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.SearchPlus);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - searchPlusWidth - trashAltWidth - spacing.X);
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current target"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Fill with current target".Loc()))
         {
             var target = Svc.Targets.Target;
             var name = target?.Name?.TextValue ?? string.Empty;

@@ -1,6 +1,7 @@
 ﻿using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -15,7 +16,7 @@ public static class Custom
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new CustomEntryNode
             {
@@ -29,18 +30,18 @@ public static class Custom
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("This section allows you to build custom \"Bothers\".");
-        sb.AppendLine("Many bothers are very simple, consisting of a single callback parameter to a given addon when it appears. This is for those types of bothers.");
+        sb.AppendLine("This section allows you to build custom \"Bothers\".".Loc());
+        sb.AppendLine("Many bothers are very simple, consisting of a single callback parameter to a given addon when it appears. This is for those types of bothers.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Callback parameter parsing works the same as in Something Need Doing.");
-        sb.AppendLine("Custom bothers are registered via AddonLifeCycle on the PostSetup event.");
+        sb.AppendLine("Callback parameter parsing works the same as in Something Need Doing.".Loc());
+        sb.AppendLine("Custom bothers are registered via AddonLifeCycle on the PostSetup event.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Some bothers may require infeasible parameters, waits, or different AddonEvents. Those can still be requested for the normal bother system.");
+        sb.AppendLine("Some bothers may require infeasible parameters, waits, or different AddonEvents. Those can still be requested for the normal bother system.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Example:");
+        sb.AppendLine("Example:".Loc());
         sb.AppendLine("   AddonName: Character");
         sb.AppendLine("   Parameters: -1");
-        sb.AppendLine("   Effect: When opening the Character addon, it will instantly be closed. Probably not useful.");
+        sb.AppendLine("   " + "Effect: When opening the Character addon, it will instantly be closed. Probably not useful.".Loc());
 
         ImGui.SameLine();
         ImGuiX.IconButton(FontAwesomeIcon.QuestionCircle, sb.ToString());
@@ -51,7 +52,7 @@ public static class Custom
     {
         using var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, spacing);
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -61,7 +62,7 @@ public static class Custom
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
@@ -71,7 +72,7 @@ public static class Custom
             }
         }
 
-        ImGui.TextUnformatted("Note:");
+        ImGui.TextUnformatted("Note:".Loc());
         var noteText = node.Text;
         if (ImGui.InputText($"##{node.Name}-{nameof(noteText)}", ref noteText, 10_000, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
         {
@@ -79,9 +80,9 @@ public static class Custom
             C.Save();
         }
         ImGui.SameLine();
-        ImGuiComponents.HelpMarker("This is not used for anything, it's just a note to help remember what this bother does.");
+        ImGuiComponents.HelpMarker("This is not used for anything, it's just a note to help remember what this bother does.".Loc());
 
-        ImGui.TextUnformatted("Addon Name:");
+        ImGui.TextUnformatted("Addon Name:".Loc());
         var addonName = node.Addon;
         if (ImGui.InputText($"##{node.Name}-{nameof(addonName)}", ref addonName, 100, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
         {
@@ -90,7 +91,7 @@ public static class Custom
             CustomAddonCallbacks.Toggle();
         }
 
-        ImGui.TextUnformatted("Parameters:");
+        ImGui.TextUnformatted("Parameters:".Loc());
         var callbackParams = node.CallbackParams;
         if (ImGui.InputText($"##{node.Name}-{nameof(callbackParams)}", ref callbackParams, 150, ImGuiInputTextFlags.AutoSelectAll | ImGuiInputTextFlags.EnterReturnsTrue))
         {

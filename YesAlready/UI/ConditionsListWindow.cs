@@ -1,6 +1,7 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System;
 using System.Linq;
@@ -10,7 +11,7 @@ namespace YesAlready.Interface;
 
 internal class ConditionsListWindow : Window
 {
-    public static string Title = $"{Name} Conditions List";
+    public static string Title = $"{Name} " + "Conditions List".Loc();
     public ConditionsListWindow() : base(Title)
     {
         Size = new Vector2(525, 600);
@@ -21,14 +22,14 @@ internal class ConditionsListWindow : Window
     {
         using var _ = ImRaii.PushColor(ImGuiCol.ResizeGrip, 0);
 
-        ImGui.TextUnformatted($"Current Conditions: {string.Join(", ", Svc.Condition.AsReadOnlySet().Where(x => Svc.Condition[x]).Select(flag => flag.ToString()).ToList())}");
+        ImGui.TextUnformatted("Current Conditions: ??".Loc(string.Join(", ", Svc.Condition.AsReadOnlySet().Where(x => Svc.Condition[x]).Select(flag => flag.ToString()).ToList())));
 
         ImGui.Columns(2);
 
         ImGui.TextUnformatted("ID");
         ImGui.NextColumn();
 
-        ImGui.TextUnformatted("Name");
+        ImGui.TextUnformatted("Name".Loc());
         ImGui.NextColumn();
 
         ImGui.Separator();

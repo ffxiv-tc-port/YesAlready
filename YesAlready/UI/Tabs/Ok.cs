@@ -1,4 +1,5 @@
 using Dalamud.Interface;
+using ECommons.LanguageHelpers;
 using ImGuiNET;
 using System.Numerics;
 using System.Text;
@@ -14,7 +15,7 @@ public static class Ok
         var newStyle = new Vector2(style.ItemSpacing.X / 2, style.ItemSpacing.Y);
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, newStyle);
 
-        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add new entry".Loc()))
         {
             var newNode = new OkEntryNode { Enabled = false, Text = "Your text goes here" };
             OkRootFolder.Children.Add(newNode);
@@ -22,7 +23,7 @@ public static class Ok
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last seen as new entry"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last seen as new entry".Loc()))
         {
             var io = ImGui.GetIO();
             var createFolder = io.KeyShift;
@@ -32,7 +33,7 @@ public static class Ok
         }
 
         ImGui.SameLine();
-        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder".Loc()))
         {
             var newNode = new TextFolderNode { Name = "Untitled folder" };
             OkRootFolder.Children.Add(newNode);
@@ -40,22 +41,22 @@ public static class Ok
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("Enter into the input all or part of the text inside a dialog.");
-        sb.AppendLine("For example: \"You cannot carry any more letters\" for the full mailbox dialog.");
+        sb.AppendLine("Enter into the input all or part of the text inside a dialog.".Loc());
+        sb.AppendLine("For example: \"You cannot carry any more letters\" for the full mailbox dialog.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.");
-        sb.AppendLine("As such: \"/.* carry any more letters .*/\"");
+        sb.AppendLine("Alternatively, wrap your text in forward slashes to use as a regex.".Loc());
+        sb.AppendLine("As such: \"/.* carry any more letters .*/\"".Loc());
         sb.AppendLine();
-        sb.AppendLine("If it matches, the ok button will be clicked.");
+        sb.AppendLine("If it matches, the ok button will be clicked.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Right click a line to view options.");
-        sb.AppendLine("Double click an entry for quick enable/disable.");
-        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.");
+        sb.AppendLine("Right click a line to view options.".Loc());
+        sb.AppendLine("Double click an entry for quick enable/disable.".Loc());
+        sb.AppendLine("Ctrl-Shift right click a line to delete it and any children.".Loc());
         sb.AppendLine();
-        sb.AppendLine("\"Add last seen as new entry\" button modifiers:");
-        sb.AppendLine("   Shift-Click to add to a new or first existing folder.");
+        sb.AppendLine("\"Add last seen as new entry\" button modifiers:".Loc());
+        sb.AppendLine("   " + "Shift-Click to add to a new or first existing folder.".Loc());
         sb.AppendLine();
-        sb.AppendLine("Currently supported text addons:");
+        sb.AppendLine("Currently supported text addons:".Loc());
         sb.AppendLine("  - SelectOk");
 
         ImGui.SameLine();
@@ -83,7 +84,7 @@ public static class Ok
             ImGui.PopStyleColor();
 
         if (!validRegex)
-            ImGuiX.TextTooltip("Invalid Text Regex");
+            ImGuiX.TextTooltip("Invalid Text Regex".Loc());
 
         if (ImGui.IsItemHovered())
         {
@@ -122,7 +123,7 @@ public static class Ok
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
         var enabled = node.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             node.Enabled = enabled;
             C.Save();
@@ -131,7 +132,7 @@ public static class Ok
         var trashAltWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
 
         ImGui.SameLine(ImGui.GetContentRegionMax().X - trashAltWidth);
-        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+        if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
         {
             if (C.TryFindParent(node, out var parentNode))
             {
