@@ -1,3 +1,4 @@
+using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Plugin;
@@ -46,7 +47,25 @@ public class YesAlready : IDalamudPlugin
         EzCmd.Add(Command, OnCommand, "Opens the plugin window.".Loc(), int.MinValue);
         Aliases.Each(a => EzCmd.Add(a, OnCommand, $"{Command} alias"));
 
-        _ = new EzDtr(() => new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}")), () => { C.Enabled ^= true; C.Save(); });
+        // green dot = actively running, no-entry sign = off/paused - game icon font has no
+        // spinner glyph, so this uses an IconPayload/BitmapFontIcon (bitmap icon) instead of
+        // text, same technique as LazyLoot/WrathCombo's DTR entries; tooltip keeps the exact
+        // state in words since the bar itself is icon-only now. EzDtr only auto-refreshes
+        // .Text each frame, not .Tooltip, so the tooltip is updated as a side effect inside
+        // the same per-frame Text callback (yesAlreadyDtr isn't invoked until the next
+        // Framework.Update tick, well after this local is assigned, so the self-reference
+        // inside its own initializer is safe). Arrow glyph identifies the entry as YesAlready
+        // (BitmapFontIcon has no play/fast-forward icon in this API generation - SeIconChar's
+        // smaller glyph set has ArrowRight instead, mixed into the same SeString as a
+        // TextPayload alongside the IconPayload state icon).
+        EzDtr yesAlreadyDtr = null!;
+        yesAlreadyDtr = new EzDtr(() =>
+        {
+            yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"));
+            return new SeString(
+                new TextPayload(SeIconChar.ArrowRight.ToIconString()),
+                new IconPayload(Active ? BitmapFontIcon.GreenDot : BitmapFontIcon.NoCircle));
+        }, () => { C.Enabled ^= true; C.Save(); });
 
         LoadTerritories();
         ToggleFeatures(true);
