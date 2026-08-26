@@ -41,8 +41,23 @@ internal class MainWindow : Window
     private static TextFolderNode TalkRootFolder => C.TalkRootFolder;
     private static TextFolderNode NumericsRootFolder => C.NumericsRootFolder;
 
-    public override void PreDraw() => ImGui.PushStyleColor(ImGuiCol.ResizeGrip, 0);
-    public override void PostDraw() => ImGui.PopStyleColor();
+    // 🔴 Dalamud 的 Window.PreDraw/PostDraw 不是空實作:它們負責推/彈 ImGuiStyleVar.Alpha,
+    // 也就是 Dalamud 視窗設定裡的「每視窗不透明度」。override 掉而不呼叫 base,
+    // 使用者拉這個視窗的透明度就會**靜默無效** —— 沒有錯誤訊息,只是滑桿拉了沒反應。
+    // ⚠️ 兩支必須成對:base.PreDraw 推的 style var 只會由 base.PostDraw 彈掉。
+    // 自家的 PushStyleColor 夾在內側(push 在 base.PreDraw 之後、pop 在 base.PostDraw 之前),
+    // 維持 LIFO 對稱。
+    public override void PreDraw()
+    {
+        base.PreDraw();
+        ImGui.PushStyleColor(ImGuiCol.ResizeGrip, 0);
+    }
+
+    public override void PostDraw()
+    {
+        ImGui.PopStyleColor();
+        base.PostDraw();
+    }
 
     public override void Draw()
     {
