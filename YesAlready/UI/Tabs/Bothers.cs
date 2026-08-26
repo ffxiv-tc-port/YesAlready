@@ -2,7 +2,7 @@ using Dalamud.Game.ClientState.Keys;
 using Dalamud.Interface.Utility.Raii;
 using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System;
 using System.Linq;
 

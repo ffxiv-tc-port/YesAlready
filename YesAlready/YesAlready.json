@@ -7,7 +7,6 @@
   "RepoUrl": "https://github.com/Lother/YesAlready",
   "IconUrl": "https://raw.githubusercontent.com/Lother/DalamudPluginsTC/main/icons/YesAlready.png",
   "ApplicableVersion": "any",
-  "DalamudApiLevel": 12,
   "Tags": [
     "punish",
     "plugin"
