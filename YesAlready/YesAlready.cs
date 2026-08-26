@@ -1,3 +1,4 @@
+using Dalamud.Game.Gui.Dtr;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -61,11 +62,29 @@ public class YesAlready : IDalamudPlugin
         EzDtr yesAlreadyDtr = null!;
         yesAlreadyDtr = new EzDtr(() =>
         {
-            yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"));
+            yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload(
+                $"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
+                + "\n" + "Left click: toggle on/off".Loc()
+                + "\n" + "Right click: open/close settings".Loc()));
             return new SeString(
                 new TextPayload(SeIconChar.ArrowRight.ToIconString()),
                 new IconPayload(Active ? BitmapFontIcon.GreenDot : BitmapFontIcon.NoCircle));
-        }, () => { C.Enabled ^= true; C.Save(); });
+        });
+
+        // ⚠️ 點擊處理不能交給 EzDtr 的 onClick 參數：那個型別是 `Action`（收不到事件），
+        // 分不出左右鍵。而 EzDtr.OnUpdate 只在自己的 OnClick 非 null 時才每幀覆寫
+        // Entry.OnClick——所以這裡傳 null、改成自己設，才不會被它蓋掉。
+        yesAlreadyDtr.Entry!.OnClick = ev =>
+        {
+            // 右鍵開關設定視窗（再按一次關閉）；左鍵維持原本的啟用切換。
+            if (ev.ClickType == MouseClickType.Right)
+            {
+                EzConfigGui.Toggle();
+                return;
+            }
+            C.Enabled ^= true;
+            C.Save();
+        };
 
         LoadTerritories();
         ToggleFeatures(true);

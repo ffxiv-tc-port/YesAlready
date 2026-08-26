@@ -130,6 +130,14 @@ public static class Bothers
                 C.Save();
             }
             ImGuiX.IndentedTextColored("Automatically closes the PurifyResult window when done reducing.".Loc());
+
+            var purifyAutomatic = C.AetherialReductionAutomatic;
+            if (ImGui.Checkbox("PurifyResult (Automatic)".Loc(), ref purifyAutomatic))
+            {
+                C.AetherialReductionAutomatic = purifyAutomatic;
+                C.Save();
+            }
+            ImGuiX.IndentedTextColored("Press the game's own Automatic button on the PurifyResult window, so the game reduces every remaining item by itself. You still reduce the first item yourself.".Loc());
         }
 
         #endregion
@@ -301,7 +309,37 @@ public static class Bothers
                 C.LotteryWeeklyInput = lotto;
                 C.Save();
             }
-            ImGuiX.IndentedTextColored("Automatically purchase a Jumbo Cactpot ticket with a random number.".Loc());
+            ImGuiX.IndentedTextColored("Automatically purchase a Jumbo Cactpot ticket when the number entry window opens.".Loc());
+
+            if (C.LotteryWeeklyInput)
+            {
+                using var indent = ImRaii.PushIndent();
+
+                var randomMode = C.LotteryWeeklyNumberMode == Configuration.JumboCactpotNumberMode.Random;
+                if (ImGui.RadioButton("Random number".Loc(), randomMode))
+                {
+                    C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Random;
+                    C.Save();
+                }
+
+                ImGui.SameLine();
+                if (ImGui.RadioButton("Fixed number".Loc(), !randomMode))
+                {
+                    C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Fixed;
+                    C.Save();
+                }
+
+                if (!randomMode)
+                {
+                    var fixedNumber = C.LotteryWeeklyFixedNumber;
+                    ImGui.SetNextItemWidth(100);
+                    if (ImGui.InputInt("Number (0-9999)".Loc(), ref fixedNumber))
+                    {
+                        C.LotteryWeeklyFixedNumber = Math.Clamp(fixedNumber, 0, 9999);
+                        C.Save();
+                    }
+                }
+            }
 
             // 19. HWDLottery
             var kupo = C.KupoOfFortune;

@@ -22,19 +22,32 @@ internal class SatisfactionSupply : AddonFeature
     protected override unsafe void HandleAddonEvent(AddonEvent eventType, AddonArgs addonInfo, AtkUnitBase* atk)
     {
         if (Disabled || !GenericHelpers.IsAddonReady(atk)) return;
+
+        // AgentSatisfactionSupply.Instance() 走 CS 的 [Agent] 產生器(agentModule == null ? null : ...),
+        // 也就是說它是合法會回 null 的。這支是 SatisfactionSupply 的 addon 事件回呼,實務上代理人
+        // 幾乎一定活著 —— 但「幾乎一定」不是守衛,而解參考 null 是 corrupted-state 的
+        // AccessViolation,try/catch 完全攔不到。
+        // 取一次本地指標、判空後在同一次回呼內重用(原本一輪迴圈裡裸呼叫兩次),不跨幀保存。
+        var agent = AgentSatisfactionSupply.Instance();
+        if (agent == null)
+        {
+            // fail-closed:這一次回呼不交任何東西。addon 還開著的話下次 PostUpdate 會再進來重試。
+            return;
+        }
+
         var reader = new ReaderSatisfactionSupply(atk);
 
         foreach (var (value, index) in reader.Quantities.WithIndex())
         {
             if (value != 0 && !GenericHelpers.TryGetAddonByName<AtkUnitBase>("Request", out var _))
             {
-                if (reader.WillItemOvercap(AgentSatisfactionSupply.Instance()->Items[index], Log))
+                if (reader.WillItemOvercap(agent->Items[index], Log))
                 {
                     Svc.Chat.PrintPluginMessage("Further turn in will overcap scrips.");
                     Disabled = true;
                     return;
                 }
-                Log($"Turning in item #{AgentSatisfactionSupply.Instance()->Items[index].Id}");
+                Log($"Turning in item #{agent->Items[index].Id}");
                 Callback.Fire(atk, false, 1, index);
             }
         }
@@ -141,32 +154,66 @@ public unsafe class ReaderSatisfactionSupply(AtkUnitBase* UnitBase, int BeginOff
     public int MinBotQuantity => ReadInt(31) ?? 0;
     public int FshQuantity => ReadInt(40) ?? 0;
 
-    public AgentSatisfactionSupply.ItemInfo DoHItem => AgentSatisfactionSupply.Instance()->Items[0];
-    public AgentSatisfactionSupply.ItemInfo MinBotItem => AgentSatisfactionSupply.Instance()->Items[1];
-    public AgentSatisfactionSupply.ItemInfo FshItem => AgentSatisfactionSupply.Instance()->Items[2];
+    // 下面五個成員目前在本 repo 沒有任何呼叫端(保留不刪),但它們都是裸解參考
+    // AgentSatisfactionSupply.Instance() —— 該取得器合法會回 null,一旦有人開始用就是
+    // 攔不到的 AccessViolation。先把守衛補上,退化值取各自真正中性的那個:
+    // ItemInfo 回 default(Id 為 0,呼叫端本來就得當成「沒有這個項目」),Span 回空跨度。
+    public AgentSatisfactionSupply.ItemInfo DoHItem => GetItemInfo(0);
+    public AgentSatisfactionSupply.ItemInfo MinBotItem => GetItemInfo(1);
+    public AgentSatisfactionSupply.ItemInfo FshItem => GetItemInfo(2);
 
-    public Span<uint> CraftScripIds => AgentSatisfactionSupply.Instance()->CrafterScripIds;
-    public Span<uint> GatherScripIds => AgentSatisfactionSupply.Instance()->GathererScripIds;
+    private static AgentSatisfactionSupply.ItemInfo GetItemInfo(int index)
+    {
+        var agent = AgentSatisfactionSupply.Instance();
+        if (agent == null) return default;
+        return agent->Items[index];
+    }
+
+    public Span<uint> CraftScripIds
+    {
+        get
+        {
+            var agent = AgentSatisfactionSupply.Instance();
+            if (agent == null) return default;
+            return agent->CrafterScripIds;
+        }
+    }
+
+    public Span<uint> GatherScripIds
+    {
+        get
+        {
+            var agent = AgentSatisfactionSupply.Instance();
+            if (agent == null) return default;
+            return agent->GathererScripIds;
+        }
+    }
 
     public bool WillItemOvercap(AgentSatisfactionSupply.ItemInfo item, Action<string> log)
     {
+        // CurrencyManager.Instance() 在 CS 裡是 [StaticAddress(..., isPointer: true)] —— 讀的是「指標的位址」,
+        // 遊戲還沒把那個管理器配起來時真的會回 null,解參考就是攔不到的 AVE。
+        // 這一支原本在同一個方法裡裸呼叫十二次(六行、每行兩次),改成取一次本地指標、判空後重用。
+        var currency = CurrencyManager.Instance();
+        if (currency == null)
+            throw new Exception("CurrencyManager unavailable; cannot tell whether the reward would overcap");
         if (GetItem(item.Id) is { SpiritbondOrCollectability: var collectability })
         {
             log($"Checking overcap for item #{item.Id} with collectability {collectability}");
             if (collectability > item.Collectability3)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[2]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[2]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[2] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[2];
+                log($"Item #{item.Id} [{item.Reward1Quantity[2]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[2]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[2] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[2];
             }
             if (collectability > item.Collectability2)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[1]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[1]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[1] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[1];
+                log($"Item #{item.Id} [{item.Reward1Quantity[1]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[1]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[1] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[1];
             }
             if (collectability > item.Collectability1)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[0]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[0]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[0] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[0];
+                log($"Item #{item.Id} [{item.Reward1Quantity[0]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[0]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[0] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[0];
             }
         }
         throw new Exception($"Failed to find item [{item.Id}] in inventory");

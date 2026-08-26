@@ -113,8 +113,10 @@ public static class Numerics
                 else node.Percentage = percentage;
                 if (percentage > 100) node.Percentage = 100;
                 else node.Percentage = percentage;
-                C.Save();
             }
+            // 滑桿拖曳中每畫格都可能回傳 true，存檔要延到放手才做一次。
+            if (ImGui.IsItemDeactivatedAfterEdit())
+                C.Save();
         }
         else
         {

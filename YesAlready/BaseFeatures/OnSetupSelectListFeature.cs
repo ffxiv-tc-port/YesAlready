@@ -79,7 +79,7 @@ internal abstract class OnSetupSelectListFeature : BaseFeature, IDisposable
         {
             PluginLog.Error($"Don't crash the game.\n{ex}");
         }
-        return onItemSelectedHook.Original(self, eventType, eventParam, eventData, inputData);
+        return onItemSelectedHook.OriginalDisposeSafe(self, eventType, eventParam, eventData, inputData);
     }
 
     private unsafe string?[] GetEntryTexts(PopupMenu* popupMenu)
