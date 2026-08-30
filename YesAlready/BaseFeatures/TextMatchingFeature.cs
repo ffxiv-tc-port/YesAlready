@@ -16,9 +16,19 @@ public abstract class TextMatchingFeature : AddonFeature
     /// </summary>
     private const int ReadyRetryFrames = 60;
 
+    /// <summary>
+    /// 距離上一次評估超過這麼久，就當作是換了一個新的對話框，log 重新印一次。
+    /// 掛在 PostUpdate 上的功能每畫格都會評估，所以只要有這麼長的空檔就一定是關掉了。
+    /// </summary>
+    private const long DecisionLogResetMs = 1000;
+
     private string? _retryAddonName;
     private int _retryFramesLeft;
     private bool _retrySubscribed;
+
+    private string? _lastLoggedText;
+    private bool _lastLoggedProceeding;
+    private long _lastDecisionTick;
 
     protected override bool IsEnabled() => true;
     protected abstract unsafe string GetSetLastSeenText(AtkUnitBase* atk);
@@ -62,15 +72,42 @@ public abstract class TextMatchingFeature : AddonFeature
     private unsafe void Process(AtkUnitBase* atk)
     {
         var text = GetSetLastSeenText(atk);
-        Log($"text={text}");
+        var matchingNode = ShouldProceed(text, atk);
+        var proceeding = matchingNode is not null;
 
-        if (ShouldProceed(text, atk) is { } matchingNode)
+        if (ShouldLogDecision(text, proceeding))
         {
-            Log("Proceeding");
-            Proceed(atk, matchingNode);
+            Log($"text={text}");
+            Log(proceeding ? "Proceeding" : "Not proceeding");
         }
-        else
-            Log("Not proceeding");
+
+        if (matchingNode is not null)
+            Proceed(atk, matchingNode);
+    }
+
+    /// <summary>
+    /// 判斷這次的評估結果值不值得寫一行 log。Talk 這類掛在 PostUpdate 上的功能，
+    /// 對話框開著就是每一畫格評估一次，逐次印會把整份 log 洗掉（實測 3.85 萬行的
+    /// 「Not proceeding」、峰值 862 行/分），而且連續幾百行的內容一模一樣。
+    /// 只有「看到的文字」或「要不要動作」跟上一次不同時才印；另外距離上一次評估
+    /// 超過 <see cref="DecisionLogResetMs"/> 毫秒就視為換了一個對話框，重新印一次，
+    /// 這樣「同一個 NPC 再講一次話」不會被誤當成重複而整段消失。
+    /// 這個方法只影響 log，判斷與動作本身完全沒變。
+    /// </summary>
+    private bool ShouldLogDecision(string text, bool proceeding)
+    {
+        var now = Environment.TickCount64;
+        var stale = _lastDecisionTick == 0 || now - _lastDecisionTick > DecisionLogResetMs;
+        var changed = stale
+            || proceeding != _lastLoggedProceeding
+            || !string.Equals(text, _lastLoggedText, StringComparison.Ordinal);
+
+        _lastDecisionTick = now;
+        if (!changed) return false;
+
+        _lastLoggedText = text;
+        _lastLoggedProceeding = proceeding;
+        return true;
     }
 
     private void ScheduleRetry(string addonName)

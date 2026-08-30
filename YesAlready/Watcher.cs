@@ -14,8 +14,15 @@ public class Watcher : IDisposable
     [EzHook("E8 ?? ?? ?? ?? 0F B6 E8 8B 44 24 20", detourName: nameof(FireCallbackDetour), true)]
     private readonly EzHook<FireCallbackDelegate> FireCallbackHook = null!;
 
+    /// <summary>
+    /// 距離上一次 callback 超過這麼久就當作是新的一輪操作，重複的內容也重新印一次。
+    /// </summary>
+    private const long CallbackLogResetMs = 1000;
+
     private bool _wasDisableKeyPressed;
     private uint _lastTargetId;
+    private string? _lastLoggedCallback;
+    private long _lastCallbackLogTick;
 
     public string LastSeenDialogText { get; set; } = string.Empty;
     public string LastSeenOkText { get; set; } = string.Empty;
@@ -97,7 +104,20 @@ public class Watcher : IDisposable
                     _ => $"Unknown Type: {atkValues[i].Type}"
                 })
                 .ToList();
-            PluginLog.Debug($"[{nameof(Watcher)}] Callback triggered on {atkUnitBase->NameString} with values: {string.Join(", ", atkValueList.Select(value => value.ToString()))}");
+            // 這個 hook 每次 SelectString/SelectIconString 觸發 callback 都會進來，逐次印會
+            // 把整份 log 洗掉（實測 2.88 萬行、峰值 862 行/分），而連續的內容幾乎都一模一樣。
+            // 只在內容跟上一次不同、或距離上一次超過 CallbackLogResetMs 毫秒時才印。
+            // LastSeenListIndex 照樣每次更新，行為沒變。
+            var message = $"[{nameof(Watcher)}] Callback triggered on {atkUnitBase->NameString} with values: {string.Join(", ", atkValueList.Select(value => value.ToString()))}";
+            var nowTick = Environment.TickCount64;
+            if (_lastCallbackLogTick == 0 || nowTick - _lastCallbackLogTick > CallbackLogResetMs
+                || !string.Equals(message, _lastLoggedCallback, StringComparison.Ordinal))
+            {
+                _lastLoggedCallback = message;
+                PluginLog.Debug(message);
+            }
+            _lastCallbackLogTick = nowTick;
+
             LastSeenListIndex = atkValues[0].Int;
         }
         catch (Exception ex)
