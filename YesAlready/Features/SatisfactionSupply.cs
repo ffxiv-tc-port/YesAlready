@@ -94,7 +94,10 @@ internal class SatisfactionSupply : AddonFeature
                 }
                 if (SlotsFilled.Contains(i)) return;
                 var val = i;
-                Service.TaskManager.Enqueue(() => TryClickItem(addon, val));
+                // 🔴🔴 這個 lambda 最快也是下一個 tick 才跑,絕對不能把上面那個 AddonRequest*
+                // 捕獲進去 —— 捕獲＝跨幀保存原生指標,視窗被拆掉之後解參考就是攔不到的存取違規。
+                // 只把「第幾格」帶進去,視窗留給執行的當下重新解析。
+                Service.TaskManager.Enqueue(() => TryFillRequestSlot(val));
             }
         }
         else
@@ -104,9 +107,27 @@ internal class SatisfactionSupply : AddonFeature
         }
     }
 
-    private static unsafe bool? TryClickItem(AddonRequest* addon, int i)
+    /// <summary>
+    /// 在交納視窗上把第 <paramref name="i"/> 格填好。<b>視窗是在執行的當下才解析的。</b>
+    /// </summary>
+    /// <remarks>
+    /// 🔴 原本的簽章收的是排入佇列那一幀取到的 <c>AddonRequest*</c>,而這支最快也是下一個
+    /// tick 才跑 —— 那是跨幀保存原生指標,視窗被拆掉之後解參考就是 <c>AccessViolationException</c>
+    /// (corrupted-state exception,try/catch 攔不到)。位址失效不會有任何徵兆,唯一的防護是
+    /// <b>不要保存,執行的當下重新解析</b>。
+    /// 📌 重解不會對到別的一扇:排入端(<see cref="RequestFill"/>)本來就是用同一支
+    /// <c>TryGetAddonByName</c> 查 index 1,重解拿到的是同一個入口的當下結果。
+    /// ⚠️ 視窗不在就回 <see langword="false"/>(＝這一輪沒做完、下個 tick 再來),不是
+    /// <see langword="null"/>(null 會清掉整條佇列)。Request 真的收掉時 <see cref="RequestFill"/>
+    /// 會走 else 分支 Abort();就算沒走到,NeoTaskManager 的 30 秒逾時也會把佇列清乾淨。
+    /// </remarks>
+    private static unsafe bool? TryFillRequestSlot(int i)
     {
         if (SlotsFilled.Contains(i)) return true;
+
+        if (!GenericHelpers.TryGetAddonByName<AddonRequest>("Request", out var addon)
+            || !GenericHelpers.IsAddonReady((AtkUnitBase*)addon))
+            return false;
 
         var contextMenu = (AtkUnitBase*)Svc.GameGui.GetAddonByName("ContextIconMenu", 1).Address;
 
