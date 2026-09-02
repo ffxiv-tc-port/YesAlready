@@ -23,6 +23,11 @@ internal class RetainerItemTransferProgress : AddonFeature
 
         if (MemoryHelper.ReadSeStringNullTerminated(new nint(titleValue->String.Value)).GetText() == Svc.Data.GetExcelSheet<Addon>().GetRow(13528).Text)   // 原為 First(x => x.RowId == 13528):O(n) 全表掃描找主鍵,GetRow 是索引查詢
         {
+            // 🔴 關窗鈕按下即關，而這是 PostUpdate：關閉中的那幾幀仍會進來、標題字串也還讀得到
+            // ⇒ 不擋就是每個關閉幀再按一次。
+            // 🔑 鍵取實際被按的那個指標（am 是以型別名稱重查 index 1 的結果，不一定是事件帶進來的那一扇）。
+            if (!AddonPressGuard.TryBeginPress("RetainerItemTransferProgress", am.Base)) return;
+
             PluginLog.Debug("Closing Entrust Duplicates menu");
             am.Close();
         }

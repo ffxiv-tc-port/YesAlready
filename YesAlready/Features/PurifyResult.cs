@@ -30,6 +30,13 @@ internal class PurifyResult : AddonFeature
                 if (GenericHelpers.IsComponentEnabled(automaticButton)) return;
             }
 
+            // 🔴 這一發是關窗。PostUpdate 每一幀都會進來，而關閉中的那幾幀三關全過、標題文字也還讀得到，
+            // 不擋就是每個關閉幀再送一次＝攔不到的存取違規。
+            // 空參數鍵：與 PurifyResultAutomatic 的「自動」鈕併成同一筆（同一個實例只准按一次）——
+            // 按下自動鈕之後這扇窗就在被換掉的路上，此時再送 -1 是同一種形狀的第二發，
+            // 而那段期間 IsComponentEnabled 本來就不可信。
+            if (!AddonPressGuard.TryBeginPress(addonInfo.AddonName, atk)) return;
+
             PluginLog.Debug("Closing Purify Results menu");
             Callback.Fire(atk, true, -1);
         }

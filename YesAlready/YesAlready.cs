@@ -35,6 +35,12 @@ public class YesAlready : IDalamudPlugin
     {
         P = this;
         ECommonsMain.Init(pluginInterface, P);
+
+        // 🔴 守衛的幀計數器要排在本外掛所有其他 Framework.Update 訂閱之前：同一個外掛內部的
+        // Framework.Update 多播委派包在單一 try/catch 裡，排在前面的處理常式擲例外時，
+        // 後面所有處理常式那個 tick 完全不會被呼叫 —— 時鐘停住＝守衛的逃生口失準。
+        AddonPressGuard.EnsureWatching();
+
         ECommons.LanguageHelpers.Localization.Init("ChineseTraditional");
 
         C = Svc.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
@@ -127,6 +133,7 @@ public class YesAlready : IDalamudPlugin
     public void Dispose()
     {
         Svc.PluginInterface.UiBuilder.OpenMainUi -= EzConfigGui.Toggle;
+        AddonPressGuard.ForceTeardown();
         ECommonsMain.Dispose();
     }
 

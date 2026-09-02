@@ -42,6 +42,11 @@ internal class PurifyResultAutomatic : AddonFeature
         // PostUpdate 每幀都會進來；按鈕按下後到視窗換掉之間會有數幀空窗
         if (!EzThrottler.Throttle("YesAlready.PurifyResultAutomatic", 1000)) return;
 
+        // 🔴 節流不是防護：它記的是「上一次動作在哪個時刻」而不是「這扇窗按過了」。
+        // 按下之後這扇窗就要被 PurifyAutoDialog 換掉，那段關閉中的幀 IsComponentEnabled 也不可信。
+        // 空參數鍵＝與 PurifyResult 的關窗 -1 併成同一筆，同一個實例只准按一次。
+        if (!AddonPressGuard.TryBeginPress(addonInfo.AddonName, atk)) return;
+
         Log("Pressing the automatic aetherial reduction button");
         master.Automatic();
     }

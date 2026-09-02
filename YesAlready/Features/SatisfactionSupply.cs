@@ -47,6 +47,13 @@ internal class SatisfactionSupply : AddonFeature
                     Disabled = true;
                     return;
                 }
+                // 送出交付事件之後 SatisfactionSupply 本身不會關（它開出 Request 子視窗），
+                // 所以歸「多次互動窗」：守衛擋掉的是「Request 還沒出現就每一幀重送」，
+                // 逃生口 15 幀之後照樣補送。粒度含 index —— 同一幀對不同格各送一次是正常流程。
+                // 真正的危險形狀是使用者自己把 SatisfactionSupply 關掉、還有剩餘數量而 Request 不在時，
+                // 關閉中的那幾幀 PostUpdate 仍會進來。
+                if (!AddonPressGuard.TryBeginRoutinePress(addonInfo.AddonName, atk, $"turnin:{index}")) continue;
+
                 Log($"Turning in item #{agent->Items[index].Id}");
                 Callback.Fire(atk, false, 1, index);
             }
@@ -108,12 +115,23 @@ internal class SatisfactionSupply : AddonFeature
             var slot = i - 1;
             var unk = 44 * i + (i - 1);
 
-            Callback.Fire(&addon->AtkUnitBase, false, 2, slot, 0, 0);
+            // 這一發是「在 Request 上開出該格的選單」，Request 不會因此關閉 ⇒ 多次互動窗。
+            // 擋掉的是「選單一直沒開起來就每個 tick 重送」；回傳值與改動前一樣是 false
+            //（＝這一輪沒做完、下個 tick 再來），呼叫端控制流完全沒變。
+            if (AddonPressGuard.TryBeginRoutinePress("Request", &addon->AtkUnitBase, $"slot:{slot}"))
+                Callback.Fire(&addon->AtkUnitBase, false, 2, slot, 0, 0);
 
             return false;
         }
         else
         {
+            // 🔴 選單按下即關。NeoTaskManager 一個 framework tick 只跑一次 CurrentTask，
+            // 下一個 tick 換下一格的 TryClickItem 進來時選單正在關閉中 ——
+            // GetAddonByName 仍回實例、IsVisible 仍為真，於是走到這裡對關閉中的選單再送一發＝AVE。
+            // 被擋下時回 false（＝這一輪沒按到、下個 tick 再來），不是 null（null 會清掉整條佇列），
+            // 而且順帶不再把這一格誤記成「已填」。
+            if (!AddonPressGuard.TryBeginPress("ContextIconMenu", contextMenu)) return false;
+
             Callback.Fire(contextMenu, false, 0, 0, 1021003, 0, 0);
             PluginLog.Debug($"Filled slot {i}");
             SlotsFilled.Add(i);
@@ -135,7 +153,11 @@ internal class SatisfactionSupply : AddonFeature
             var m = new AddonMaster.Request(addon);
             if (m.IsHandOverEnabled && m.IsFilled)
             {
-                if (EzThrottler.Throttle("Handin"))
+                // 🔴 交出之後 Request 就關掉了。EzThrottler 記的是「上一次動作在哪個時刻」而不是
+                // 「這扇窗按過了」，低 FPS 時 500 毫秒可能還落在關閉中的那幾幀裡；按鈕啟用檢查同樣不算防護
+                //（m.IsFilled 在 vendored ECommons 裡迴圈永不執行、恆回 true，更是等於沒檢查）。
+                // 節流先判、守衛後判：守衛一回 true 就已經登記，登記完卻因為節流沒按會白白封鎖到逃生口。
+                if (EzThrottler.Throttle("Handin") && AddonPressGuard.TryBeginPress("Request", addon, "handover"))
                 {
                     PluginLog.Debug("Handing over request");
                     m.HandOver();
