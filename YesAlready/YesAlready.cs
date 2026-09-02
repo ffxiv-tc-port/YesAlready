@@ -98,37 +98,74 @@ public class YesAlready : IDalamudPlugin
         Svc.PluginInterface.UiBuilder.OpenMainUi += EzConfigGui.Toggle;
     }
 
+    /// <summary>
+    /// 外掛啟動時建起來、<b>實際掛著監聽器</b>的那一份功能實例。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這份清單存在的理由:<see cref="BaseFeature.Enabled"/> 與 <c>AddonFeature._attributes</c>
+    /// 都是<b>實例狀態</b>,而監聽器綁的是<b>某一個特定實例</b>的 <c>OnAddonEvent</c>。
+    /// 以前這裡與 IPC 的查詢各自 <c>Activator.CreateInstance</c> 造一個全新的實例,
+    /// 那個實例的 <c>Enabled</c> 恆為 <see langword="false"/>、<c>_attributes</c> 恆為
+    /// <see langword="null"/> ⇒ 查詢恆回「沒啟用」、<c>Disable()</c> 拆不掉真正註冊的那一組、
+    /// <c>Enable()</c> 反而再掛一組重複的監聽器(同一個 addon 事件被處理兩次)。
+    /// </remarks>
+    private static readonly List<BaseFeature> FeatureInstances = [];
+
     public static void ToggleFeatures(bool enable)
     {
-        var featureAssembly = Assembly.GetExecutingAssembly();
-
-        foreach (var type in featureAssembly.GetTypes())
+        if (FeatureInstances.Count == 0)
         {
-            if (typeof(BaseFeature).IsAssignableFrom(type) && !type.IsAbstract)
+            var featureAssembly = Assembly.GetExecutingAssembly();
+
+            foreach (var type in featureAssembly.GetTypes())
             {
-                if (Activator.CreateInstance(type) is BaseFeature feature)
+                if (typeof(BaseFeature).IsAssignableFrom(type) && !type.IsAbstract)
                 {
-                    if (enable)
-                        feature.Enable();
-                    else
-                        feature.Disable();
+                    if (Activator.CreateInstance(type) is BaseFeature feature)
+                        FeatureInstances.Add(feature);
                 }
             }
         }
+
+        foreach (var feature in FeatureInstances)
+        {
+            if (enable)
+                feature.Enable();
+            else
+                feature.Disable();
+        }
     }
 
-    public T? GetFeature<T>() where T : BaseFeature
+    /// <summary>照型別取得<b>實際註冊的</b>那一份功能實例;沒有就回 <see langword="null"/>。</summary>
+    public static BaseFeature? FindFeature(Type type)
     {
-        var type = typeof(T);
-
-        if (!typeof(BaseFeature).IsAssignableFrom(type) || type.IsAbstract)
-            return null;
-
-        if (Activator.CreateInstance(type) is T feature)
-            return feature;
-
+        foreach (var feature in FeatureInstances)
+            if (feature.GetType() == type)
+                return feature;
         return null;
     }
+
+    /// <summary>照名稱取得<b>實際註冊的</b>那一份功能實例(bother IPC 用)。</summary>
+    /// <remarks>
+    /// 先照 <see cref="Type.GetType(string)"/> 解 —— 那是這組 IPC 一開始的約定,名稱要含
+    /// 命名空間(例如 <c>YesAlready.Features.Talk</c>);解不出來再照 <see cref="BaseFeature.Key"/>
+    /// (＝類別簡名,例如 <c>Talk</c>)比對一次。
+    /// ⚠️ 後面那條是<b>加法</b>:原本認得的名稱行為逐字不變,只是多認得簡名 —— 呼叫端
+    /// (SomethingNeedDoing 把這三支 IPC 直接開給使用者的 Lua 巨集用)手上有的通常就是簡名。
+    /// </remarks>
+    public static BaseFeature? FindFeature(string name)
+    {
+        if (Type.GetType(name) is { } type && typeof(BaseFeature).IsAssignableFrom(type) && !type.IsAbstract
+            && FindFeature(type) is { } byType)
+            return byType;
+
+        foreach (var feature in FeatureInstances)
+            if (string.Equals(feature.Key, name, StringComparison.Ordinal))
+                return feature;
+        return null;
+    }
+
+    public T? GetFeature<T>() where T : BaseFeature => FindFeature(typeof(T)) as T;
 
     public void Dispose()
     {
