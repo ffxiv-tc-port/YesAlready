@@ -10,6 +10,7 @@ using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using YesAlready.IPC;
 using YesAlready.UI.Tabs;
 using static YesAlready.UI.Tabs.CoreTab;
 
@@ -61,12 +62,16 @@ internal class MainWindow : Window
 
     public override void Draw()
     {
-        if (Service.BlockListHandler.Locked)
+        // 🔑 阻擋清單與壓制租約都會讓 YesAlready 停手，兩者都要顯示、
+        // 「強制解除鎖定」也要兩邊一起清 —— 只清一邊的話按鈕按了沒反應，
+        // 使用者會判定成「這個按鈕壞了」而不是「還有另一個外掛壓著」。
+        if (Suppressed)
         {
-            ECommons.ImGuiMethods.ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, "Yes Already function is paused because following plugins have requested it: ??".Loc(Service.BlockListHandler.BlockList.Print()));
+            ECommons.ImGuiMethods.ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, "Yes Already function is paused because following plugins have requested it: ??".Loc(SuppressedBy() ?? ""));
             if (ImGui.Button("Force unlock".Loc()))
             {
                 Service.BlockListHandler.BlockList.Clear();
+                SuppressionLeases.ReleaseAll("使用者在設定視窗按下強制解除鎖定");
             }
         }
 

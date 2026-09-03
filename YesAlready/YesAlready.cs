@@ -16,6 +16,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using YesAlready.Interface;
+using YesAlready.IPC;
 using YesAlready.UI;
 
 namespace YesAlready;
@@ -29,7 +30,43 @@ public class YesAlready : IDalamudPlugin
     private const string Command = "/yesalready";
     private readonly string[] Aliases = ["/pyes"];
 
-    internal bool Active => C.Enabled && !Service.BlockListHandler.Locked;
+    /// <summary>YesAlready <b>現在會不會接手對話框</b>。</summary>
+    /// <remarks>
+    /// 🔴 這是複合值：使用者的開關 <c>C.Enabled</c>、阻擋清單、壓制租約<b>三者都要放行</b>。
+    /// IPC 的 <c>IsPluginEnabled</c> 回的是這個值，而 <c>SetPluginEnabled</c> 只寫第一項 ——
+    /// 讀寫不對稱是舊端點的既有語意，補救的查詢端點是 <c>IsUserEnabled</c>／<c>IsSuppressed</c>／
+    /// <c>GetSuppressionOwners</c>。
+    /// </remarks>
+    internal bool Active => C.Enabled && !Suppressed;
+
+    /// <summary>現在有沒有<b>別的外掛</b>把 YesAlready 壓著（阻擋清單或壓制租約任一有東西）。</summary>
+    internal static bool Suppressed => Service.BlockListHandler.Locked || SuppressionLeases.IsSuppressed;
+
+    /// <summary>目前壓著 YesAlready 的名字（阻擋清單 ＋ 壓制租約）；沒有就回 <see langword="null"/>。</summary>
+    /// <remarks>
+    /// ⚠️ 只給 UI／DTR 用：會配置字串，所以呼叫前先判 <see cref="Suppressed"/>。
+    /// 🔑 <b>「被誰壓著」必須在使用者看得到的地方</b> —— 這整組改動要消滅的症狀就是
+    /// 「YesAlready 突然不動了、全程零訊息、使用者以為外掛壞了」。
+    /// </remarks>
+    internal static string? SuppressedBy()
+    {
+        var owners = new List<string>(SuppressionLeases.Owners);
+
+        // ⚠️ 阻擋清單是 GetOrCreateData 出來的<b>跨外掛共用</b> HashSet：別的外掛隨時可能在
+        // 我們列舉它的當下增刪，而這支是<b>每幀</b>（DTR）被叫到的。真的撞上時
+        // InvalidOperationException 會從 EzDtr 的 Framework.Update 處理常式冒出去，
+        // 讓本外掛排在它後面的所有 Framework.Update 處理常式那個 tick 全部不被呼叫。
+        // 這裡只是要組一行給人看的字，撞到就少列幾個名字，不值得把整個 tick 賠進去。
+        try
+        {
+            owners.AddRange(Service.BlockListHandler.BlockList);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        return owners.Count == 0 ? null : string.Join("、", owners.Distinct(StringComparer.Ordinal));
+    }
 
     public YesAlready(IDalamudPluginInterface pluginInterface)
     {
@@ -68,8 +105,12 @@ public class YesAlready : IDalamudPlugin
         EzDtr yesAlreadyDtr = null!;
         yesAlreadyDtr = new EzDtr(() =>
         {
+            // 「被誰壓著」放 tooltip：它是「起疑才查」的資訊；而「有沒有被壓著」本身
+            // 靠列上的圖示（NoCircle）就看得見，不會變成看不見的「不知道」。
+            var suppressedBy = Suppressed ? SuppressedBy() : null;
             yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload(
-                $"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
+                $"{Name}: {(C.Enabled ? (Suppressed ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
+                + (suppressedBy == null ? "" : "\n" + "Paused by: ??".Loc(suppressedBy))
                 + "\n" + "Left click: toggle on/off".Loc()
                 + "\n" + "Right click: open/close settings".Loc()));
             return new SeString(
@@ -170,6 +211,9 @@ public class YesAlready : IDalamudPlugin
     public void Dispose()
     {
         Svc.PluginInterface.UiBuilder.OpenMainUi -= EzConfigGui.Toggle;
+        // 租約是行程內的靜態狀態：外掛被停用／重載時一定要丟掉，否則重新載入之後
+        // 舊的租約還壓著，而它的租用者早就沒有那把 Guid 可以交回了。
+        SuppressionLeases.ReleaseAll("YesAlready 卸載");
         AddonPressGuard.ForceTeardown();
         ECommonsMain.Dispose();
     }
