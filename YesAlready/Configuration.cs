@@ -12,6 +12,19 @@ public partial class Configuration() : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
     public bool Enabled { get; set; } = true;
+    /// <summary>
+    /// 阻擋清單（共享資料 <c>"YesAlready.StopRequests"</c>）裡的一筆最多可以連續掛多少分鐘；
+    /// <c>0</c>＝不做時間逾時。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這是<b>保險絲不是節流</b>：真正處理「掛著鎖的外掛不在了」的是
+    /// <see cref="IPC.BlockListHandler"/> 的持有者存活檢查（外掛被停用／卸載就立刻移除），
+    /// 這一格只涵蓋「外掛還活著、只是漏放」。
+    /// ⚠️ 預設訂得寬（120 分鐘）是刻意的：六個已知消費端沒有一個會連續掛超過幾分鐘，
+    /// 而<b>誤殺的代價遠大於晚幾十分鐘才自癒</b> —— 被誤殺的呼叫端全是邊緣觸發，
+    /// 不會知道自己的鎖沒了、也不會重新放回去。
+    /// </remarks>
+    public int BlockListEntryTimeoutMinutes { get; set; } = 120;
     public XivChatType MessageChannel { get; set; } = Svc.PluginInterface.GeneralChatType;
 
     public VirtualKey ForcedYesKey { get; set; } = VirtualKey.NO_KEY;

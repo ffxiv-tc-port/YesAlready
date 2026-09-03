@@ -67,10 +67,22 @@ internal class MainWindow : Window
         // 使用者會判定成「這個按鈕壞了」而不是「還有另一個外掛壓著」。
         if (Suppressed)
         {
+            // 🔑 列上（紅字）放的是「被誰壓著」——「有沒有問題」必須在列上看得見；
+            // 「每一筆還要多久才會自己解除」是「起疑才查」的資訊，放 tooltip 不佔版面。
             ECommons.ImGuiMethods.ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, "Yes Already function is paused because following plugins have requested it: ??".Loc(SuppressedBy() ?? ""));
+
+            if (ImGui.IsItemHovered())
+            {
+                var details = SuppressionDetails();
+                if (details.Length != 0)
+                    ImGuiX.TextTooltip(string.Join("\n", details));
+            }
+
             if (ImGui.Button("Force unlock".Loc()))
             {
-                Service.BlockListHandler.BlockList.Clear();
+                // 🔴 走 ForceClear 而不是直接 BlockList.Clear()：那條路徑不會寫 log，
+                // 而清掉別人的阻擋登記是不可逆且對方不會察覺的破壞 —— 至少要留下誰被清掉的紀錄。
+                Service.BlockListHandler.ForceClear("使用者在設定視窗按下強制解除鎖定");
                 SuppressionLeases.ReleaseAll("使用者在設定視窗按下強制解除鎖定");
             }
         }
@@ -163,6 +175,20 @@ internal class MainWindow : Window
             }
         }
         ImGuiX.IndentedTextColored("Select the chat channel for ?? messages to output to.".Loc(Name));
+
+        ImGui.Separator();
+
+        // 🔴 這一格是保險絲不是節流：真正處理「掛著鎖的外掛不在了」的是持有者存活檢查
+        // （BlockListHandler，外掛被停用／卸載就立刻移除），這裡只涵蓋「還活著但漏放」。
+        var blockListTimeout = C.BlockListEntryTimeoutMinutes;
+        if (ImGui.InputInt("Block list timeout (minutes, 0 = off)".Loc(), ref blockListTimeout, 10, 30))
+        {
+            if (blockListTimeout < 0) blockListTimeout = 0;
+            if (blockListTimeout > 1440) blockListTimeout = 1440;
+            C.BlockListEntryTimeoutMinutes = blockListTimeout;
+            C.Save();
+        }
+        ImGuiX.IndentedTextColored("How long another plugin may keep ?? paused before the entry is released automatically. Plugins that are no longer loaded are released immediately regardless of this setting.".Loc(Name));
     }
 
     // ====================================================================================================

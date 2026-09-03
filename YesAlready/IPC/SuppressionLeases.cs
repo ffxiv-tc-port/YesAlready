@@ -139,6 +139,38 @@ internal static class SuppressionLeases
     }
 
     /// <summary>
+    /// 目前每一把有效租約的診斷快照：租用者名字 ＋ 距離逾時還有多久（毫秒）。
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ 只給 UI／tooltip 用（會配置陣列），呼叫前先判 <see cref="IsSuppressed"/>。
+    /// 📌 同一個名字持有多把時<b>只留最晚到期的那一把</b> —— 使用者要看的是「還要等多久才會自己解除」，
+    /// 不是「這個外掛開了幾把」。
+    /// </remarks>
+    public static (string Owner, long RemainingMs)[] Snapshot()
+    {
+        if (!anyLeases) return [];
+
+        lock (Gate)
+        {
+            SweepLocked();
+            if (Leases.Count == 0) return [];
+
+            var now = Environment.TickCount64;
+            var byOwner = new Dictionary<string, long>(StringComparer.Ordinal);
+
+            foreach (var lease in Leases.Values)
+            {
+                var remaining = lease.ExpiresAt - now;
+                if (remaining < 0) remaining = 0;
+                if (!byOwner.TryGetValue(lease.Owner, out var existing) || remaining > existing)
+                    byOwner[lease.Owner] = remaining;
+            }
+
+            return byOwner.Select(x => (x.Key, x.Value)).ToArray();
+        }
+    }
+
+    /// <summary>
     /// 取得一把新的租約。回傳的 <see cref="Guid"/> 就是憑證，放開時交回
     /// <see cref="Release(Guid)"/>。
     /// </summary>

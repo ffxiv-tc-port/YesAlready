@@ -68,6 +68,41 @@ public class YesAlready : IDalamudPlugin
         return owners.Count == 0 ? null : string.Join("、", owners.Distinct(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// 「被誰壓著、還要多久才會自己解除」的逐列明細（壓制租約 ＋ 阻擋清單）。
+    /// </summary>
+    /// <remarks>
+    /// 🔑 <b>剩餘時間必須看得到</b>：兩條路徑現在都會自己到期，而「還要等多久」正是使用者
+    /// 決定「再等一下」還是「按強制解除鎖定」時唯一需要的資訊。
+    /// 📌 放 tooltip 而不是列上 —— 「有沒有被壓著」靠 DTR 圖示與設定視窗的紅字已經看得見，
+    /// tooltip 藏的是「為什麼」，不是「有沒有問題」。
+    /// ⚠️ 會配置字串與陣列，呼叫前先判 <see cref="Suppressed"/>。
+    /// </remarks>
+    internal static string[] SuppressionDetails()
+    {
+        var lines = new List<string>();
+        var leaseLabel = "Suppression lease".Loc();
+        var blockListLabel = "Block list".Loc();
+
+        foreach (var (owner, remaining) in SuppressionLeases.Snapshot())
+            lines.Add($"{owner} — {leaseLabel}, {DescribeRemaining(remaining)}");
+
+        // 卸載途中（ECommonsMain.Dispose 已經把 singleton 設回 null）DTR 還可能被畫一次。
+        if (Service.BlockListHandler is { } handler)
+            foreach (var (owner, remaining) in handler.Snapshot())
+                lines.Add($"{owner} — {blockListLabel}, {DescribeRemaining(remaining)}");
+
+        return lines.ToArray();
+    }
+
+    /// <summary>把剩餘毫秒數講成人話；<c>-1</c>＝這一筆不會自動解除（使用者把時間逾時關掉了）。</summary>
+    private static string DescribeRemaining(long remainingMs)
+        => remainingMs < 0
+            ? "no auto-release".Loc()
+            : remainingMs < 60_000
+                ? "auto-releases shortly".Loc()
+                : "auto-releases in ?? min".Loc(remainingMs / 60_000);
+
     public YesAlready(IDalamudPluginInterface pluginInterface)
     {
         P = this;
@@ -105,12 +140,12 @@ public class YesAlready : IDalamudPlugin
         EzDtr yesAlreadyDtr = null!;
         yesAlreadyDtr = new EzDtr(() =>
         {
-            // 「被誰壓著」放 tooltip：它是「起疑才查」的資訊；而「有沒有被壓著」本身
+            // 「被誰壓著、還剩多久」放 tooltip：它是「起疑才查」的資訊；而「有沒有被壓著」本身
             // 靠列上的圖示（NoCircle）就看得見，不會變成看不見的「不知道」。
-            var suppressedBy = Suppressed ? SuppressedBy() : null;
+            string[] suppressionDetails = Suppressed ? SuppressionDetails() : [];
             yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload(
                 $"{Name}: {(C.Enabled ? (Suppressed ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
-                + (suppressedBy == null ? "" : "\n" + "Paused by: ??".Loc(suppressedBy))
+                + (suppressionDetails.Length == 0 ? "" : "\n" + "Paused by: ??".Loc("\n  " + string.Join("\n  ", suppressionDetails)))
                 + "\n" + "Left click: toggle on/off".Loc()
                 + "\n" + "Right click: open/close settings".Loc()));
             return new SeString(
