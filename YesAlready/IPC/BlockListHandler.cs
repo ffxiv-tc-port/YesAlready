@@ -260,7 +260,7 @@ public class BlockListHandler : IDisposable
 
         tracked.Remove(name);
 
-        // 🔴 寫 Information：使用者跑 LogLevel 2。這一行是「YesAlready 突然又動了」時唯一的線索，
+        // 🔴 寫 Information：使用者跑 LogLevel 1。這一行是「YesAlready 突然又動了」時唯一的線索，
         // 也是「哪一個外掛漏放了鎖」的證據。
         PluginLog.Information($"[BlockList] 已自動移除「{name}」的阻擋登記：{reason}。" +
                               "YesAlready 從現在起恢復接手對話框；那個外掛若還在跑，它並不知道自己的登記沒了。");

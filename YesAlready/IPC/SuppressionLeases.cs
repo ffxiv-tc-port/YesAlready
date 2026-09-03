@@ -336,7 +336,7 @@ internal static class SuppressionLeases
             Leases.Remove(id);
             if (id == legacyPauseLease) legacyPauseLease = Guid.Empty;
 
-            // 🔴 寫 Information：使用者跑 LogLevel 2。租約到期＝「有人壓著 YesAlready 卻沒放開」，
+            // 🔴 寫 Information：使用者跑 LogLevel 1。租約到期＝「有人壓著 YesAlready 卻沒放開」，
             // 這一行是使用者回報「YesAlready 突然不動了／突然又動了」時唯一的線索。
             PluginLog.Information($"[SuppressionLease] 「{owner}」的壓制租約 {id} 已逾時，自動放開" +
                                   "（租用者沒有續約，可能已經當掉或被卸載）。");
