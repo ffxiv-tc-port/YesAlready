@@ -57,6 +57,34 @@ public class YesAlreadyIPC
 
     #region 壓制租約（lease）
 
+    /*
+     * 🔑🔑 這一組的「形狀」是全艦隊壓制租約的<b>標準形狀</b>——AutoRetainer 從 2026-09-03 起比照。
+     * ───────────────────────────────────────────────────────────────────────────
+     * 兩邊同名端點的簽章逐字相同，可以直接照抄呼叫端的宣告（只有 EzIPC 的 prefix 不同）：
+     *
+     *     AcquireSuppressionFor(string owner, int ms) -> Guid
+     *     ReleaseSuppression   (Guid lease)           -> bool
+     *     RenewSuppression     (Guid lease)           -> bool
+     *     RenewSuppressionFor  (Guid lease, int ms)   -> bool
+     *
+     * 🔴 <b>形狀必須一致的理由是「不一致會靜默出錯」。</b>
+     * Dalamud 的 CallGate 在型別對不上時<b>不會直接報錯</b>，而是把值 JSON 序列化再反序列化成
+     * 呼叫端宣告的型別（Dalamud/Plugin/Ipc/Internal/CallGateChannel.cs 的 ConvertObject）。
+     * AutoRetainer 那邊本來是「用租用者名字當鍵」的 ReleaseSuppression(string)，
+     * 照這裡的寫法傳一個 Guid 過去時，<b>Guid → string 轉得過去</b>，變成
+     * 「歸還一個名字是 GUID 的租約」——舊實作對任何非空字串都回 true，
+     * 呼叫端拿到一個看似成功的 true，真正的租約卻繼續壓著直到逾時。全程零訊息。
+     *
+     * ⚠️ <b>兩邊唯一的差別是「時間政策」，不是形狀。</b>
+     * 這裡預設租期 10 分鐘、硬性上限 60 分鐘（<see cref="SuppressionLeases.MaxLeaseMilliseconds"/>）；
+     * AutoRetainer 沿用它原本的 5 分鐘上限。<b>要求的租期兩邊都會被夾</b>，
+     * 所以呼叫端一律要續約，不要假設自己拿到了要求的時長。
+     *
+     * 📌 AutoRetainer 目前<b>沒有</b>不帶時長的便利版 AcquireSuppression(string) -> Guid：
+     *    那個名字在它那邊曾經是 Func&lt;string, bool&gt;，重新註冊成回 Guid 會讓還沒更新的
+     *    舊消費端撞上 IpcTypeMismatchError（而 ECommons 的 SafeWrapper.IPCException
+     *    只攔 IpcNotReadyError，攔不住這個）。等消費端更新過一輪再補。
+     */
     /// <summary>
     /// 請 YesAlready 在你的序列期間讓開，租期 <see cref="SuppressionLeases.DefaultLeaseMilliseconds"/> 毫秒。
     /// 回傳的 <see cref="Guid"/> 是憑證，結束時交回 <see cref="ReleaseSuppression"/>。
