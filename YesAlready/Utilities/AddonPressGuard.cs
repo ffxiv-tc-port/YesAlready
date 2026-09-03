@@ -236,6 +236,17 @@ internal static unsafe class AddonPressGuard
 
         records.ByParam[key] = new PressRecord(frame);
         records.LastFrame = frame;
+
+        // 🔴🔴 跨外掛重按診斷 —— <b>全艦隊 15 份各自獨立的 AddonPressGuard 逐字統一這一行</b>，
+        // 格式改了就無法交叉比對，不要「順手改得好看一點」。
+        // 存在的理由：每一份守衛只擋得住<b>自己</b>按過的位址。外掛 A 按下之後那扇窗
+        // 「關閉中」的那幾幀裡，外掛 B 的表是空的 ⇒ 照按 ⇒ 原生 AVE（try/catch 攔不到）。
+        // 這一輪只收資料、不做共用登記處：先用一輪 log 回答「跨外掛重按是不是真的在發生」。
+        // 🔴 刻意<b>不節流</b>：跨外掛比對需要每一次，而按壓是使用者可見動作、頻率天然很低。
+        // 🔴 刻意寫 Information：使用者跑 LogLevel 2，Debug/Verbose 收不到。
+        // 🔴 只印位址<b>數值</b>，永不解參考 —— 這個位址隨時可能已經失效。
+        // 🔴 只在<b>真的要送出按壓</b>的這一刻寫（return true 之前），不在每幀檢查時寫。
+        PluginLog.Information($"[按窗診斷] plugin=YesAlready addon={name} addr=0x{address:X} key={key}");
         return true;
     }
 
