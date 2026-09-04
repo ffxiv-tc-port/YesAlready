@@ -1,34 +1,29 @@
-<div align="center">
-
-<img src="Assets/yesalready_icon.png" alt="Yes Already IconUrl" width="15%">
-
 # Yes Already
 
-Clicks Yes in various dialogs you've specified.
+自動幫你點選各種確認對話框，不用每次都手動按「是」。
 
-<br />
+## 功能
 
-</div>
+- 自訂清單：依文字比對自動點選「是／否」對話框、選單、輸入框、確認框
+- 涵蓋大量原生介面情境，包含：任務難度確認、副本確認、公會迷你任務、雇員（NPC）任務詢問／結果、
+  滿足供給、時裝檢定、飛空艇／潛水艇探索結果、材料鑲嵌／取出、精選幻化、
+  零食購買、卡片商店、交易多件物品、氣宇軒昂週報、抽獎輸入、賽馬結果、
+  宇宙探索（WKS）獎勵領取等
+- 每種對話框類型可個別啟用／停用、設定專屬條件
+- 快捷鍵：按住可暫時停用插件、或按住強制點選「是」
+- 提供 IPC 供其他插件暫時壓制（暫停）本插件的行為
 
-**As of 2023/10/03, YesAlready is now maintained by Puni.sh, support can be provided in our Discord community. Please update your repo url to the one found further below.**
+## 使用
 
-This plugin stores a list of Yes/No dialogs (among others) and clicks yes for you when they show up. Look, I already said yes once, don't ask me again. Like for all those little prompts in dungeons. Yes I really do want to teleport to the next area in Praetorium.
+- `/pyes` 開啟設定視窗
+- `/pyes help` 檢視可用的指令列參數
 
-Each type of dialog needs to be manually added, if you would like one that is not currently supported, please let me know.
+## 安裝
 
-## In-game usage
+在 Dalamud 設定的「自訂插件庫」加入
+`https://raw.githubusercontent.com/ffxiv-tc-port/DalamudPluginsTC/main/repo.json` 並啟用，
+再從插件列表安裝。
 
-- Type `/pyes` to pull up the GUI.
-- Type `/pyes help` to view additional command line arguments.
+## 作者與支援
 
-## Installation
-
-- Add `https://love.puni.sh/ment.json` to your list of repos in `/xlsettings`
-
-<br />
-
-<div align="center">
-
-[![image](https://discordapp.com/api/guilds/1001823907193552978/embed.png?style=banner2)](https://discord.gg/Zzrcc8kmvy)
-
-</div>
+原作者社群為 [Puni.sh](https://puni.sh/)，支援與討論請至 [Discord](https://discord.gg/Zzrcc8kmvy)。
