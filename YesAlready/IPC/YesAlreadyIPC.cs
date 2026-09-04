@@ -75,10 +75,11 @@ public class YesAlreadyIPC
      * 「歸還一個名字是 GUID 的租約」——舊實作對任何非空字串都回 true，
      * 呼叫端拿到一個看似成功的 true，真正的租約卻繼續壓著直到逾時。全程零訊息。
      *
-     * ⚠️ <b>兩邊唯一的差別是「時間政策」，不是形狀。</b>
-     * 這裡預設租期 10 分鐘、硬性上限 60 分鐘（<see cref="SuppressionLeases.MaxLeaseMilliseconds"/>）；
-     * AutoRetainer 沿用它原本的 5 分鐘上限。<b>要求的租期兩邊都會被夾</b>，
-     * 所以呼叫端一律要續約，不要假設自己拿到了要求的時長。
+     * ⚠️ <b>時間政策原本是兩邊唯一的差別，現在也對齊了。</b>
+     * 這裡的預設租期與硬性上限都是 5 分鐘（<see cref="SuppressionLeases.MaxLeaseMilliseconds"/>），
+     * 與 AutoRetainer 相同。<b>要求的租期兩邊都會被夾</b>，所以呼叫端一律要續約
+     * （建議每 30 秒一次），不要假設自己拿到了要求的時長。
+     * 📌 真的被夾到時，提供端會對同一個租用者寫一次 Information —— 夾值不再是靜默的。
      *
      * 📌 AutoRetainer 目前<b>沒有</b>不帶時長的便利版 AcquireSuppression(string) -> Guid：
      *    那個名字在它那邊曾經是 Func&lt;string, bool&gt;，重新註冊成回 Guid 會讓還沒更新的

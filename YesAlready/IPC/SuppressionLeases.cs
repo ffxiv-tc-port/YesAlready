@@ -43,22 +43,38 @@ namespace YesAlready.IPC;
 /// </remarks>
 internal static class SuppressionLeases
 {
-    /// <summary>沒指定時長時的預設租期（10 分鐘）。</summary>
+    /// <summary>沒指定時長時的預設租期（5 分鐘）。</summary>
     /// <remarks>
     /// 挑這個值的理由：比任何一段「自動化序列」都長（交納、改名、換區、跑一段任務），
     /// 又短到租用者整個當掉時使用者不會以為外掛壞了。長工作請用 <see cref="Renew"/> 續約。
+    /// <para>
+    /// 📌 刻意與 <see cref="MaxLeaseMilliseconds"/> 相同，也與 AutoRetainer 那套相同 ——
+    /// 全艦隊的壓制租約時間政策統一成 5 分鐘。
+    /// </para>
     /// </remarks>
-    public const int DefaultLeaseMilliseconds = 600_000;
+    public const int DefaultLeaseMilliseconds = 300_000;
 
     /// <summary>
-    /// 單一把租約的<b>硬性</b>上限（60 分鐘）。要求更長會被夾到這個值。
+    /// 單一把租約的<b>硬性</b>上限（5 分鐘）。要求更長會被夾到這個值。
     /// </summary>
     /// <remarks>
     /// 🔴 這是「租用者當掉不能讓 YesAlready 永久失效」的最後一道保險，<b>不是</b>建議值。
-    /// 需要壓住超過一小時的呼叫端必須自己續約 —— 續約失敗（呼叫端已經不在了）正是
+    /// 需要壓住超過 5 分鐘的呼叫端必須自己續約 —— 續約失敗（呼叫端已經不在了）正是
     /// 我們想要偵測的那件事。
+    /// <para>
+    /// 🔴 <b>砍短上限的前提是呼叫端先留好餘裕。</b><see cref="Renew"/> 的第一件事是
+    /// <see cref="SweepLocked"/>，而掃除條件是 <c>now &gt;= ExpiresAt</c> ⇒ 續約間隔只要不
+    /// 明顯小於租期，第一次心跳送到時那把已經被掃掉、續約<b>必定</b>回
+    /// <see langword="false"/>（不是競態，是每次都會發生）。三個自有呼叫端
+    /// （AutoDuty／Questionable／SomethingNeedDoing）已經一起改成「租 5 分鐘、每 30 秒續約」
+    /// 的 10 倍餘裕，與 AutoRetainer 一致。
+    /// </para>
+    /// <para>
+    /// ⚠️ 舊端點 <c>PausePlugin</c> <b>沒有續約管道</b>：要求超過這個上限的暫停會被夾短，
+    /// 時間一到 YesAlready 就恢復搶按窗。那不再是靜默的 —— 見 <see cref="ClampDuration"/>。
+    /// </para>
     /// </remarks>
-    public const int MaxLeaseMilliseconds = 3_600_000;
+    public const int MaxLeaseMilliseconds = 300_000;
 
     /// <summary>舊端點 <c>PausePlugin</c> 用的<b>單一匿名租約</b>持有者名稱。</summary>
     /// <remarks>
@@ -183,7 +199,7 @@ internal static class SuppressionLeases
     public static Guid Acquire(string? owner, int milliseconds)
     {
         var name = string.IsNullOrWhiteSpace(owner) ? "(unnamed)" : owner!.Trim();
-        var duration = ClampDuration(milliseconds);
+        var duration = ClampDuration(milliseconds, name);
         var id = Guid.NewGuid();
 
         lock (Gate)
@@ -231,7 +247,7 @@ internal static class SuppressionLeases
             SweepLocked();
             if (!Leases.TryGetValue(id, out var lease)) return false;
 
-            var duration = milliseconds is { } ms ? ClampDuration(ms) : lease.DurationMs;
+            var duration = milliseconds is { } ms ? ClampDuration(ms, lease.Owner) : lease.DurationMs;
             lease.DurationMs = duration;
 
             // 🔴 取 max：續約永遠只會往後延，不會把別人（或自己先前）已經談好的
@@ -263,7 +279,7 @@ internal static class SuppressionLeases
     /// </remarks>
     public static void LegacyPause(int milliseconds)
     {
-        var duration = ClampDuration(milliseconds);
+        var duration = ClampDuration(milliseconds, LegacyPauseOwner);
         var until = Environment.TickCount64 + duration;
 
         lock (Gate)
@@ -309,8 +325,54 @@ internal static class SuppressionLeases
         PluginLog.Information($"[SuppressionLease] 丟掉全部壓制租約（{reason}）：{string.Join("、", owners)}。");
     }
 
-    private static int ClampDuration(int milliseconds)
-        => milliseconds < 1 ? 1 : milliseconds > MaxLeaseMilliseconds ? MaxLeaseMilliseconds : milliseconds;
+    /// <summary>已經回報過「租期被夾值」的租用者名字。<b>同一個名字只寫一次。</b></summary>
+    private static readonly HashSet<string> ClampReported = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 只保護 <see cref="ClampReported"/>。<b>刻意不共用 <see cref="Gate"/></b>：
+    /// <see cref="Renew"/> 是在已經持有 <see cref="Gate"/> 的狀態下呼叫進來的。
+    /// </summary>
+    private static readonly object ClampGate = new();
+
+    /// <summary>
+    /// 把要求的租期夾進 <c>1</c>～<see cref="MaxLeaseMilliseconds"/>，並在<b>真的夾到</b>時
+    /// 對同一個租用者寫一次 <c>Information</c>。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <b>夾值以前是完全靜默的。</b>最需要看得見的是舊端點 <c>PausePlugin</c>
+    /// （SomethingNeedDoing 的 Lua <c>IPC.YesAlready.PausePlugin(毫秒)</c>）：使用者自己寫的
+    /// 巨集可以傳任意毫秒數，而那條路<b>沒有續約管道</b> ⇒ 超過上限就被砍短、YesAlready
+    /// 在巨集跑到一半醒過來搶按窗，而 log 上一個字都沒有。這一行至少讓 log 說得出
+    /// 發生了什麼事。
+    /// <para>
+    /// 📌 <b>同一個租用者只寫一次</b>（<see cref="ClampReported"/> 永不清空）：續約是每 30 秒
+    /// 一次的心跳，每次都寫會把使用者的 log 洗掉。
+    /// </para>
+    /// <para>
+    /// 📌 用 <c>Information</c> 而不是 <c>Warning</c>：這是「說明發生了什麼」的診斷，
+    /// 不是錯誤。也<b>不</b>走 DuoLog —— 那會無條件印進使用者的聊天視窗。
+    /// </para>
+    /// </remarks>
+    private static int ClampDuration(int milliseconds, string owner)
+    {
+        if (milliseconds >= 1 && milliseconds <= MaxLeaseMilliseconds)
+            return milliseconds;
+
+        var clamped = milliseconds < 1 ? 1 : MaxLeaseMilliseconds;
+
+        bool first;
+        lock (ClampGate)
+            first = ClampReported.Add(owner);
+
+        if (first)
+            PluginLog.Information(
+                $"[SuppressionLease] 「{owner}」要求的租期 {milliseconds} 毫秒超出範圍，已夾成 {clamped} 毫秒"
+                + $"（上限 {MaxLeaseMilliseconds} 毫秒）。要壓住更久必須自己續約；"
+                + "舊端點 PausePlugin 沒有續約管道，時間一到 YesAlready 就會恢復搶按窗。"
+                + "這行訊息對同一個租用者只會出現一次。");
+
+        return clamped;
+    }
 
     /// <summary>清掉已經到期的租約。<b>呼叫端必須先持有 <see cref="Gate"/>。</b></summary>
     private static void SweepLocked()
