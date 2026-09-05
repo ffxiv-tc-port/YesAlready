@@ -17,7 +17,13 @@ internal class SatisfactionSupply : AddonFeature
 
     private static bool Disabled;
     private static List<int> SlotsFilled { get; set; } = [];
-    private static ulong RequestAllow;
+    /// <summary>Request 視窗開啟後要再等到哪一幀才允許交出。0 ＝還沒開始等。</summary>
+    /// <remarks>
+    /// 幀號來自 <see cref="AddonPressGuard.CurrentFrame"/>（見那裡的說明：<c>UiBuilder.FrameCount</c>
+    /// 在過場動畫期間會停住）。型別跟著它一起是 <see langword="long"/>。
+    /// 📌 <c>0</c> 當哨兵是安全的：<c>CurrentFrame</c> 從 0 起算且只增，<c>+ 4</c> 之後最小是 4。
+    /// </remarks>
+    private static long RequestAllow;
 
     protected override unsafe void HandleAddonEvent(AddonEvent eventType, AddonArgs addonInfo, AtkUnitBase* atk)
     {
@@ -167,10 +173,17 @@ internal class SatisfactionSupply : AddonFeature
 
         if (GenericHelpers.TryGetAddonByName<AtkUnitBase>("Request", out var addon) && GenericHelpers.IsAddonReady(addon))
         {
+            // 🔴🔴 這一支訂閱在 Svc.Framework.Update（見 Enable()），也就是說它每個遊戲 tick
+            // 都會進來 —— 但原本的閘門數的是 Svc.PluginInterface.UiBuilder.FrameCount，
+            // 那個計數器在①隱藏 UI ②過場動畫 ③GPose 期間完全不前進（Dalamud 的 OnDraw()
+            // 在那三種情況提早 return，FrameCount++ 在 return 之後，三個開關預設全開）。
+            // ⇒ 交納途中放過場時，「等 4 幀」永遠等不到，整個交納流程靜默卡死。
+            // AddonPressGuard 的時鐘是自己掛在 Framework.Update 上數的，不受 UI 隱藏影響。
+            // ⚠️ 兩個計數器的絕對值不同，所以是整段換掉，不可以一邊存一邊讀。
             if (RequestAllow == 0)
-                RequestAllow = Svc.PluginInterface.UiBuilder.FrameCount + 4;
+                RequestAllow = AddonPressGuard.CurrentFrame + 4;
 
-            if (Svc.PluginInterface.UiBuilder.FrameCount < RequestAllow) return;
+            if (AddonPressGuard.CurrentFrame < RequestAllow) return;
             var m = new AddonMaster.Request(addon);
             if (m.IsHandOverEnabled && m.IsFilled)
             {

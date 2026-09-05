@@ -113,6 +113,42 @@ internal static unsafe class AddonPressGuard
     private static IAddonLifecycle.AddonEventDelegate? lifecycleHandler;
 
     /// <summary>
+    /// 合格的幀時鐘：掛在 <see cref="Svc.Framework"/> 的 Update 上自己數，過場動畫／隱藏 UI／
+    /// GPose 期間照樣前進。<b>本外掛任何「等 N 幀」的閘門一律讀這裡。</b>
+    /// </summary>
+    /// <remarks>
+    /// 🔴🔴 <b>不要用 <c>Svc.PluginInterface.UiBuilder.FrameCount</c></b>：Dalamud 的
+    /// <c>UiBuilder.OnDraw()</c>（<c>UiBuilder.cs:748</c>）在 ①使用者隱藏 UI ②過場動畫 ③GPose
+    /// 三種情況下 <c>:757-770</c> 就 <c>return</c>，而 <c>FrameCount++</c> 在 <c>:814</c>
+    /// —— 在那些 return 之後，而三個開關預設全是 <c>true</c>
+    /// （<c>DalamudConfiguration.cs:184/189/194</c>）。⇒ 過場期間那個計數器完全不前進，
+    /// 掛在它上面的等待閘門<b>永不到期</b>，而訂閱在 <c>Framework.Update</c> 的邏輯照常每個
+    /// tick 被叫到 —— 結果是流程停在原地。
+    /// <para>
+    /// 🔴🔴 <b>絕對不要做混合時鐘</b>（取不到就退回 <c>UiBuilder.FrameCount</c>）：兩個計數器的
+    /// <b>絕對值完全不同</b>，存入時用 A、讀取時用 B 會讓比較整個失效 —— 不是節流變成每幀狂按，
+    /// 就是永遠不到期。<b>比任一個單一時鐘都糟。</b>
+    /// </para>
+    /// <para>
+    /// 📌 這裡順手 <see cref="EnsureWatching"/>：呼叫端可能在還沒有任何按下紀錄之前就先讀時鐘
+    /// （<c>SatisfactionSupply</c> 的交納閘門就是），沒掛上訂閱的話讀到的會是恆定的 0。
+    /// 重複呼叫是 no-op（<see cref="Interlocked"/> 把關），不會把計數器一個 tick 加兩次。
+    /// </para>
+    /// <para>
+    /// 📌 刻意<b>不</b>用 <c>Framework.Instance()->FrameCounter</c>：那支在標題／選角畫面
+    /// 是不是 null 並沒有被證實（CS 宣告是可為 null 的指標）。自己數的版本沒有這個問題。
+    /// </para>
+    /// </remarks>
+    public static long CurrentFrame
+    {
+        get
+        {
+            EnsureWatching();
+            return frameCount;
+        }
+    }
+
+    /// <summary>
     /// 掛上幀計數器與解除封鎖用的全域監聽器（重複呼叫是 no-op）。
     /// </summary>
     /// <remarks>
