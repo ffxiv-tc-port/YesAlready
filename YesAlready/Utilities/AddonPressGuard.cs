@@ -279,10 +279,13 @@ internal static unsafe class AddonPressGuard
         // 「關閉中」的那幾幀裡，外掛 B 的表是空的 ⇒ 照按 ⇒ 原生 AVE（try/catch 攔不到）。
         // 這一輪只收資料、不做共用登記處：先用一輪 log 回答「跨外掛重按是不是真的在發生」。
         // 🔴 刻意<b>不節流</b>：跨外掛比對需要每一次，而按壓是使用者可見動作、頻率天然很低。
-        // 🔴 刻意寫 Information：使用者跑 LogLevel 1，盲區只有 Verbose,Debug 收得到但單檔數十萬行會淹沒。
+        // 📌 2026-09-07 由 Information 降為 Debug：上面那個問題已經有答案了 —— 跨外掛重按是真的
+        //    （2026-09-06 02:20:20 實機：本外掛與 Marketbuddy 相隔 6ms 按下同一個 Talk 實例
+        //    0x1CA56AE0660）。使用者的 LogLevel 是 1，盲區只有 Verbose，Debug 照樣收得到；
+        //    留在 Information 只會把真正需要使用者回報的訊號淹沒。這條探針原地還在。
         // 🔴 只印位址<b>數值</b>，永不解參考 —— 這個位址隨時可能已經失效。
         // 🔴 只在<b>真的要送出按壓</b>的這一刻寫（return true 之前），不在每幀檢查時寫。
-        PluginLog.Information($"[按窗診斷] plugin=YesAlready addon={name} addr=0x{address:X} key={key}");
+        PluginLog.Debug($"[按窗診斷] plugin=YesAlready addon={name} addr=0x{address:X} key={key}");
         return true;
     }
 

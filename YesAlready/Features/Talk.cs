@@ -39,7 +39,15 @@ internal class Talk : TextMatchingFeature
         // 但逃生口只用 15 幀（關閉中的危險窗口 <10 幀，15 幀不落在裡面），每頁多等約 0.25 秒。
         // 🔑 守衛的鍵取「實際被按的那個指標」：addon 是以型別名稱重查 index 1 的結果，
         // 不一定是觸發這次 PostUpdate 的那一扇。
+        // 🔴 就緒檢查一定要驗**實際要按的那個指標**：TryGetAddonMaster 底下是
+        //    TryGetAddonByName → GetAddonByName(name, 1)，它**只判非零、完全不驗就緒**。
+        //    HandleAddonEvent 驗過的是 addonInfo.Addon（觸發這次 PostUpdate 的那一扇），
+        //    與這裡重解出來的 index 1 不保證是同一扇 ⇒ 少了這一道，被按的那個實例
+        //    在整條路徑上從頭到尾沒有被驗證過。
+        //    ⚠️ 這**擋不住**「別的外掛剛按過、正在關閉中」—— IsAddonReady 的三關在拆除途中全過。
+        //    排在守衛之前：被擋下的這一發不該佔掉一次守衛登記。
         if (GenericHelpers.TryGetAddonMaster<AddonMaster.Talk>(out var addon)
+            && addon.IsAddonReady
             && AddonPressGuard.TryBeginRoutinePress("Talk", addon.Base))
             addon.Click();
     }
