@@ -39,6 +39,9 @@ namespace YesAlready.IPC;
 /// ⚠️ <b>執行緒</b>：IPC 呼叫在呼叫端的執行緒上同步跑（SomethingNeedDoing 的巨集不在主執行緒），
 /// 所以這裡全程上鎖。<see cref="IsSuppressed"/> 每幀被讀（DTR）也被每個 addon 事件讀，
 /// 所以「一把租約都沒有」的常態走 <see cref="anyLeases"/> 這條不上鎖的快路。
+/// 🔴 <b>鎖內絕不寫 log、絕不做檔案 I/O、絕不呼叫 ImGui</b>：逾時與夾值訊息在鎖內先收進一個
+/// list，出了鎖才由 <see cref="SuppressionLeases.Flush"/> 送出（等級原樣保留）。
+/// UI 走「鎖內拍快照、鎖外畫」—— <see cref="Snapshot"/> 只在鎖裡蒐集資料，投影與配置都在鎖外。
 /// </para>
 /// </remarks>
 internal static class SuppressionLeases
@@ -117,11 +120,18 @@ internal static class SuppressionLeases
         get
         {
             if (!anyLeases) return false;
+
+            List<(bool IsWarning, string Message)>? logs = null;
+            bool suppressed;
+
             lock (Gate)
             {
-                SweepLocked();
-                return Leases.Count != 0;
+                SweepLocked(ref logs);
+                suppressed = Leases.Count != 0;
             }
+
+            Flush(logs);
+            return suppressed;
         }
     }
 
@@ -131,12 +141,20 @@ internal static class SuppressionLeases
         get
         {
             if (!anyLeases) return [];
+
+            List<(bool IsWarning, string Message)>? logs = null;
+            string[] owners;
+
             lock (Gate)
             {
-                SweepLocked();
-                if (Leases.Count == 0) return [];
-                return Leases.Values.Select(x => x.Owner).Distinct(StringComparer.Ordinal).ToArray();
+                SweepLocked(ref logs);
+                owners = Leases.Count == 0
+                    ? []
+                    : Leases.Values.Select(x => x.Owner).Distinct(StringComparer.Ordinal).ToArray();
             }
+
+            Flush(logs);
+            return owners;
         }
     }
 
@@ -146,11 +164,18 @@ internal static class SuppressionLeases
         get
         {
             if (!anyLeases) return 0;
+
+            List<(bool IsWarning, string Message)>? logs = null;
+            int count;
+
             lock (Gate)
             {
-                SweepLocked();
-                return Leases.Count;
+                SweepLocked(ref logs);
+                count = Leases.Count;
             }
+
+            Flush(logs);
+            return count;
         }
     }
 
@@ -166,24 +191,31 @@ internal static class SuppressionLeases
     {
         if (!anyLeases) return [];
 
+        List<(bool IsWarning, string Message)>? logs = null;
+        Dictionary<string, long>? byOwner = null;
+
         lock (Gate)
         {
-            SweepLocked();
-            if (Leases.Count == 0) return [];
-
-            var now = Environment.TickCount64;
-            var byOwner = new Dictionary<string, long>(StringComparer.Ordinal);
-
-            foreach (var lease in Leases.Values)
+            SweepLocked(ref logs);
+            if (Leases.Count != 0)
             {
-                var remaining = lease.ExpiresAt - now;
-                if (remaining < 0) remaining = 0;
-                if (!byOwner.TryGetValue(lease.Owner, out var existing) || remaining > existing)
-                    byOwner[lease.Owner] = remaining;
-            }
+                var now = Environment.TickCount64;
+                byOwner = new Dictionary<string, long>(StringComparer.Ordinal);
 
-            return byOwner.Select(x => (x.Key, x.Value)).ToArray();
+                foreach (var lease in Leases.Values)
+                {
+                    var remaining = lease.ExpiresAt - now;
+                    if (remaining < 0) remaining = 0;
+                    if (!byOwner.TryGetValue(lease.Owner, out var existing) || remaining > existing)
+                        byOwner[lease.Owner] = remaining;
+                }
+            }
         }
+
+        Flush(logs);
+        if (byOwner == null) return [];
+
+        return byOwner.Select(x => (x.Key, x.Value)).ToArray();
     }
 
     /// <summary>
@@ -198,17 +230,19 @@ internal static class SuppressionLeases
     /// </remarks>
     public static Guid Acquire(string? owner, int milliseconds)
     {
+        List<(bool IsWarning, string Message)>? logs = null;
         var name = string.IsNullOrWhiteSpace(owner) ? "(unnamed)" : owner!.Trim();
-        var duration = ClampDuration(milliseconds, name);
+        var duration = ClampDuration(milliseconds, name, ref logs);
         var id = Guid.NewGuid();
 
         lock (Gate)
         {
-            SweepLocked();
+            SweepLocked(ref logs);
             Leases[id] = new Lease(id, name, Environment.TickCount64 + duration) { DurationMs = duration };
             anyLeases = true;
         }
 
+        Flush(logs);
         PluginLog.Information($"[SuppressionLease] 「{name}」取得壓制租約 {id}（{duration} 毫秒）。");
         return id;
     }
@@ -216,6 +250,7 @@ internal static class SuppressionLeases
     /// <summary>交回一把租約。回 <see langword="false"/>＝這把不存在（已經放開過或已經到期）。</summary>
     public static bool Release(Guid id)
     {
+        List<(bool IsWarning, string Message)>? logs = null;
         string? owner = null;
 
         lock (Gate)
@@ -225,10 +260,11 @@ internal static class SuppressionLeases
 
             if (id == legacyPauseLease) legacyPauseLease = Guid.Empty;
 
-            SweepLocked();
+            SweepLocked(ref logs);
             if (Leases.Count == 0) anyLeases = false;
         }
 
+        Flush(logs);
         if (owner == null) return false;
 
         PluginLog.Information($"[SuppressionLease] 「{owner}」放開壓制租約 {id}。");
@@ -242,20 +278,31 @@ internal static class SuppressionLeases
     /// <param name="milliseconds">新的租期；<c>null</c>＝沿用取得時的時長。</param>
     public static bool Renew(Guid id, int? milliseconds = null)
     {
+        List<(bool IsWarning, string Message)>? logs = null;
+        bool renewed;
+
         lock (Gate)
         {
-            SweepLocked();
-            if (!Leases.TryGetValue(id, out var lease)) return false;
+            SweepLocked(ref logs);
+            if (Leases.TryGetValue(id, out var lease))
+            {
+                var duration = milliseconds is { } ms ? ClampDuration(ms, lease.Owner, ref logs) : lease.DurationMs;
+                lease.DurationMs = duration;
 
-            var duration = milliseconds is { } ms ? ClampDuration(ms, lease.Owner) : lease.DurationMs;
-            lease.DurationMs = duration;
-
-            // 🔴 取 max：續約永遠只會往後延，不會把別人（或自己先前）已經談好的
-            // 到期時間往前搬。
-            var until = Environment.TickCount64 + duration;
-            if (until > lease.ExpiresAt) lease.ExpiresAt = until;
-            return true;
+                // 🔴 取 max：續約永遠只會往後延，不會把別人（或自己先前）已經談好的
+                // 到期時間往前搬。
+                var until = Environment.TickCount64 + duration;
+                if (until > lease.ExpiresAt) lease.ExpiresAt = until;
+                renewed = true;
+            }
+            else
+            {
+                renewed = false;
+            }
         }
+
+        Flush(logs);
+        return renewed;
     }
 
     /// <summary>
@@ -279,26 +326,34 @@ internal static class SuppressionLeases
     /// </remarks>
     public static void LegacyPause(int milliseconds)
     {
-        var duration = ClampDuration(milliseconds, LegacyPauseOwner);
+        List<(bool IsWarning, string Message)>? logs = null;
+        var duration = ClampDuration(milliseconds, LegacyPauseOwner, ref logs);
         var until = Environment.TickCount64 + duration;
+        bool renewedExisting;
 
         lock (Gate)
         {
-            SweepLocked();
+            SweepLocked(ref logs);
 
             if (legacyPauseLease != Guid.Empty && Leases.TryGetValue(legacyPauseLease, out var existing))
             {
                 if (until > existing.ExpiresAt) existing.ExpiresAt = until;
                 existing.DurationMs = duration;
                 anyLeases = true;
-                return;
+                renewedExisting = true;
             }
-
-            var id = Guid.NewGuid();
-            Leases[id] = new Lease(id, LegacyPauseOwner, until) { DurationMs = duration };
-            legacyPauseLease = id;
-            anyLeases = true;
+            else
+            {
+                var id = Guid.NewGuid();
+                Leases[id] = new Lease(id, LegacyPauseOwner, until) { DurationMs = duration };
+                legacyPauseLease = id;
+                anyLeases = true;
+                renewedExisting = false;
+            }
         }
+
+        Flush(logs);
+        if (renewedExisting) return;
 
         PluginLog.Information($"[SuppressionLease] 舊端點 PausePlugin 取得匿名壓制租約（{duration} 毫秒）。");
     }
@@ -353,7 +408,7 @@ internal static class SuppressionLeases
     /// 不是錯誤。也<b>不</b>走 DuoLog —— 那會無條件印進使用者的聊天視窗。
     /// </para>
     /// </remarks>
-    private static int ClampDuration(int milliseconds, string owner)
+    private static int ClampDuration(int milliseconds, string owner, ref List<(bool IsWarning, string Message)>? logs)
     {
         if (milliseconds >= 1 && milliseconds <= MaxLeaseMilliseconds)
             return milliseconds;
@@ -365,17 +420,17 @@ internal static class SuppressionLeases
             first = ClampReported.Add(owner);
 
         if (first)
-            PluginLog.Information(
+            (logs ??= []).Add((false,
                 $"[SuppressionLease] 「{owner}」要求的租期 {milliseconds} 毫秒超出範圍，已夾成 {clamped} 毫秒"
                 + $"（上限 {MaxLeaseMilliseconds} 毫秒）。要壓住更久必須自己續約；"
                 + "舊端點 PausePlugin 沒有續約管道，時間一到 YesAlready 就會恢復搶按窗。"
-                + "這行訊息對同一個租用者只會出現一次。");
+                + "這行訊息對同一個租用者只會出現一次。"));
 
         return clamped;
     }
 
     /// <summary>清掉已經到期的租約。<b>呼叫端必須先持有 <see cref="Gate"/>。</b></summary>
-    private static void SweepLocked()
+    private static void SweepLocked(ref List<(bool IsWarning, string Message)>? logs)
     {
         if (Leases.Count == 0)
         {
@@ -400,10 +455,32 @@ internal static class SuppressionLeases
 
             // 🔴 寫 Information：使用者跑 LogLevel 1。租約到期＝「有人壓著 YesAlready 卻沒放開」，
             // 這一行是使用者回報「YesAlready 突然不動了／突然又動了」時唯一的線索。
-            PluginLog.Information($"[SuppressionLease] 「{owner}」的壓制租約 {id} 已逾時，自動放開" +
-                                  "（租用者沒有續約，可能已經當掉或被卸載）。");
+            (logs ??= []).Add((false,
+                $"[SuppressionLease] 「{owner}」的壓制租約 {id} 已逾時，自動放開" +
+                "（租用者沒有續約，可能已經當掉或被卸載）。"));
         }
 
         if (Leases.Count == 0) anyLeases = false;
+    }
+
+    /// <summary>把鎖內收集到的診斷訊息寫出去。<b>一定要在鎖外呼叫。</b></summary>
+    /// <remarks>
+    /// 🔴 <b>鎖內不寫 log</b>：Serilog 的 sink 自己有鎖、還可能做檔案 I/O，在 <see cref="Gate"/>
+    /// 裡面呼叫它等於把死鎖面積擴大到別人的元件上，而 <see cref="Gate"/> 是<b>每幀</b>被讀的
+    /// （DTR、每個 addon 事件）。所以逾時／夾值訊息在鎖內先收進一個 list，出了鎖才送出去。
+    /// <para>
+    /// 🔴 <b>等級跟著訊息走</b>，不是一律 <c>Information</c>：收訊息時就把等級記下來，
+    /// 將來在鎖內加 <c>Warning</c> 也不會被靜默降級。
+    /// </para>
+    /// </remarks>
+    private static void Flush(List<(bool IsWarning, string Message)>? logs)
+    {
+        if (logs == null) return;
+
+        foreach (var (isWarning, message) in logs)
+        {
+            if (isWarning) PluginLog.Warning(message);
+            else PluginLog.Information(message);
+        }
     }
 }
