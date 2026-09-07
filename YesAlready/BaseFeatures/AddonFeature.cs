@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using YesAlready.IPC;
 
 namespace YesAlready.BaseFeatures;
 
@@ -37,7 +38,9 @@ public abstract class AddonFeature : BaseFeature
 
     protected virtual unsafe void OnAddonEvent(AddonEvent eventType, AddonArgs addonInfo)
     {
-        if (!P.Active || !IsEnabled()) return;
+        // 🔴 IPC 的 PauseBother／SetBotherEnabled 不再去拆監聽器（那是跨執行緒改 Dalamud 的
+        // 裸 List），改成在這裡讓開。常態是兩個欄位讀取，沒有配置也沒有上鎖。
+        if (!P.Active || !IsEnabled() || BotherPauses.IsMuted(Key)) return;
         HandleAddonEvent(eventType, addonInfo, (AtkUnitBase*)addonInfo.Addon.Address);
     }
 

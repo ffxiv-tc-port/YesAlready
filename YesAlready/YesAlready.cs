@@ -83,9 +83,15 @@ public class YesAlready : IDalamudPlugin
         var lines = new List<string>();
         var leaseLabel = "Suppression lease".Loc();
         var blockListLabel = "Block list".Loc();
+        var botherLabel = "Bother paused".Loc();
 
         foreach (var (owner, remaining) in SuppressionLeases.Snapshot())
             lines.Add($"{owner} — {leaseLabel}, {DescribeRemaining(remaining)}");
+
+        // 單一 bother 的暫停不會讓整個外掛變成「被壓著」（圖示照樣是綠點），所以它<b>只</b>在
+        // 這裡看得見 —— 沒有這幾行的話「某扇窗突然不自動按了」在 UI 上完全查不到原因。
+        foreach (var (key, remaining) in BotherPauses.Snapshot())
+            lines.Add($"{key} — {botherLabel}, {DescribeRemaining(remaining)}");
 
         // 卸載途中（ECommonsMain.Dispose 已經把 singleton 設回 null）DTR 還可能被畫一次。
         if (Service.BlockListHandler is { } handler)
@@ -112,6 +118,10 @@ public class YesAlready : IDalamudPlugin
         // Framework.Update 多播委派包在單一 try/catch 裡，排在前面的處理常式擲例外時，
         // 後面所有處理常式那個 tick 完全不會被呼叫 —— 時鐘停住＝守衛的逃生口失準。
         AddonPressGuard.EnsureWatching();
+
+        // bother 的啟用／停用請求要在 framework 執行緒上套用（見 BotherPauses）：訂閱排在
+        // 守衛之後，這樣守衛的時鐘永遠是第一個被叫到的那一個。
+        BotherPauses.EnsureWatching();
 
         ECommons.LanguageHelpers.Localization.Init("ChineseTraditional");
 
@@ -142,7 +152,7 @@ public class YesAlready : IDalamudPlugin
         {
             // 「被誰壓著、還剩多久」放 tooltip：它是「起疑才查」的資訊；而「有沒有被壓著」本身
             // 靠列上的圖示（NoCircle）就看得見，不會變成看不見的「不知道」。
-            string[] suppressionDetails = Suppressed ? SuppressionDetails() : [];
+            string[] suppressionDetails = Suppressed || BotherPauses.Any ? SuppressionDetails() : [];
             yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload(
                 $"{Name}: {(C.Enabled ? (Suppressed ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
                 + (suppressionDetails.Length == 0 ? "" : "\n" + "Paused by: ??".Loc("\n  " + string.Join("\n  ", suppressionDetails)))
@@ -249,6 +259,7 @@ public class YesAlready : IDalamudPlugin
         // 租約是行程內的靜態狀態：外掛被停用／重載時一定要丟掉，否則重新載入之後
         // 舊的租約還壓著，而它的租用者早就沒有那把 Guid 可以交回了。
         SuppressionLeases.ReleaseAll("YesAlready 卸載");
+        BotherPauses.ReleaseAll("YesAlready 卸載");
         AddonPressGuard.ForceTeardown();
         ECommonsMain.Dispose();
     }

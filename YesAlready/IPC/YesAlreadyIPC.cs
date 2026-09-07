@@ -153,16 +153,34 @@ public class YesAlreadyIPC
     /// <see langword="false"/>、停用是 no-op(拆不掉真正註冊的那一組)、啟用反而<b>再掛一組
     /// 重複的監聽器</b>。現在一律取 <see cref="YesAlready.FindFeature(string)"/> 回的那一份 ——
     /// 也就是外掛啟動時建起來、實際掛著監聽器的實例。
+    /// <para>
+    /// 📌 <b>回的是複合值</b>（與 <see cref="IsPluginEnabled"/> 同一套分工）：實例的啟用狀態、
+    /// 還沒套用的 <see cref="SetBotherEnabled"/> 請求、以及 <see cref="PauseBother"/> 的暫停，
+    /// 三者都要放行才回 <see langword="true"/>。暫停期間回 <see langword="false"/> 是<b>舊行為</b>
+    /// （舊實作的暫停就是 <c>Disable()</c>），刻意保留。
+    /// </para>
     /// </remarks>
-    [EzIPC] public bool IsBotherEnabled(string name) => FindFeature(name) is { Enabled: true };
+    [EzIPC] public bool IsBotherEnabled(string name) => FindFeature(name) is { } feature && BotherPauses.EffectiveEnabled(feature);
 
     /// <remarks>
     /// 走 <see cref="BaseFeature.TrySetEnabled"/> 而不是直接 <c>Enable()</c>:對已經啟用的
     /// 功能再 <c>Enable()</c> 一次會掛出第二組監聽器(Dalamud 的 <c>RegisterListener</c> 不去重),
     /// 同一個事件就會被處理兩次。名稱找不到時與改動前一樣什麼都不做。
+    /// <para>
+    /// 🔴 <b>切換本身改在 framework 執行緒上做</b>（<see cref="BotherPauses"/>）：
+    /// <c>Enable()</c>／<c>Disable()</c> 會去增刪 Dalamud <c>AddonLifecyclePluginScoped</c> 的
+    /// <b>裸 <c>List</c></b>，而這支 IPC 跑在<b>呼叫端的執行緒</b>上（SomethingNeedDoing 的 Lua
+    /// 巨集不在主執行緒），與使用者在設定視窗按下自訂回呼開關的那條路並行 ⇒ 那個 List 會壞掉。
+    /// 📌 <b>呼叫端觀察不到這一畫格的落差</b>：<see cref="IsBotherEnabled"/> 與實際的按窗閘門
+    /// 都看「有效狀態」，寫進去<b>當下</b>就生效。
+    /// </para>
     /// </remarks>
     [EzIPC]
-    public void SetBotherEnabled(string name, bool state) => FindFeature(name)?.TrySetEnabled(state);
+    public void SetBotherEnabled(string name, bool state)
+    {
+        if (FindFeature(name) is not { } feature) return;
+        BotherPauses.RequestSetEnabled(feature.Key, state);
+    }
 
     /// <summary>暫停 YesAlready 指定的毫秒數。</summary>
     /// <remarks>
@@ -184,18 +202,31 @@ public class YesAlreadyIPC
     [EzIPC]
     public void PausePlugin(int milliseconds) => SuppressionLeases.LegacyPause(milliseconds);
 
+    /// <summary>把<b>單一個</b> bother 暫停指定的毫秒數；時間一到自己恢復。</summary>
+    /// <remarks>
+    /// 🔴 <b>舊實作把暫停排進了外掛共用的那條任務佇列，三個各自獨立的缺陷都在
+    /// <see cref="BotherPauses"/> 的類別註解裡逐條寫著</b>（卡住交納／派遣的按鈕序列、
+    /// 被 <c>TaskManager.Abort()</c> 清掉之後<b>永遠</b>關著、跨執行緒寫裸 <c>List</c>）。
+    /// 現在只記一個到期時刻，與 <see cref="PausePlugin"/> 同形。
+    /// <para>
+    /// 📌 <b>單一呼叫端看到的行為不變</b>：呼叫後 <see cref="IsBotherEnabled"/> 回
+    /// <see langword="false"/>、時間到之後回 <see langword="true"/>。
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>兩處刻意的行為變更</b>：①重疊的暫停現在<b>取 max</b> 並回
+    /// <see langword="true"/>（舊實作在暫停期間再呼叫一次會回 <see langword="false"/> 而且
+    /// 不延長）②要求的時間會被夾到 <see cref="SuppressionLeases.MaxLeaseMilliseconds"/>，
+    /// 與 <see cref="PausePlugin"/> 同一套時間政策，<b>夾到時 log 看得見</b>。
+    /// </para>
+    /// </remarks>
+    /// <returns><see langword="false"/>＝找不到這個名稱，或它本來就沒啟用（＝什麼都沒做）。</returns>
     [EzIPC]
     public bool PauseBother(string name, int milliseconds)
     {
-        var feature = FindFeature(name);
-        if (feature is null || !feature.Enabled)
+        if (FindFeature(name) is not { } feature || !BotherPauses.EnabledIgnoringPause(feature))
             return false;
-        feature.Disable();
-        Service.TaskManager.EnqueueDelay(milliseconds);
-        // 恢復也走冪等包裝:暫停期間若有人先把它開回來,直接 Enable() 就會掛出第二組監聽器。
-        // 保持陳述式主體 ⇒ 仍然綁到 Enqueue(Action) 多載(一次性、跑完就算完成),
-        // 不會變成回傳 false 的 Func<bool>(那會一路重試到 30 秒逾時)。
-        Service.TaskManager.Enqueue(() => { feature.TrySetEnabled(true); });
+
+        BotherPauses.Pause(feature.Key, milliseconds);
         return true;
     }
 

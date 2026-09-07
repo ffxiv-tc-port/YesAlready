@@ -5,6 +5,7 @@ using Lumina.Excel.Sheets;
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
+using YesAlready.IPC;
 
 namespace YesAlready.BaseFeatures;
 
@@ -129,7 +130,9 @@ public abstract class TextMatchingFeature : AddonFeature
 
     private unsafe void OnRetryTick(IFramework framework)
     {
-        if (_retryAddonName is not { } addonName || !P.Active)
+        // 重試是掛在畫格更新上的，不經過 OnAddonEvent 的閘門 ⇒ 暫停要在這裡自己判一次，
+        // 否則暫停之前排下的那次重試會在暫停期間把窗按掉。
+        if (_retryAddonName is not { } addonName || !P.Active || BotherPauses.IsMuted(Key))
         {
             CancelRetry();
             return;
