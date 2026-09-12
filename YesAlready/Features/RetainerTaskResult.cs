@@ -1,4 +1,5 @@
 using Lumina.Excel.Sheets;
+using Lumina.Text.ReadOnly;
 
 namespace YesAlready.Features;
 
@@ -16,8 +17,13 @@ internal class RetainerTaskResult : AddonFeature
             var reassignButton = am.ReassignButton;
             if (reassignButton == null || reassignButton->ButtonTextNode == null) return;
 
-            var buttonText = reassignButton->ButtonTextNode->NodeText.GetText();
-            if (buttonText == Svc.Data.GetExcelSheet<Addon>(Svc.ClientState.ClientLanguage).GetRow(2365).Text) // Recall
+            // 🔴 兩端剝 SeString 的實作必須是同一套。下面那個 == 的右邊是 Lumina 的
+            // ReadOnlySeString,左邊是 string ⇒ 會走 implicit operator(string) 包回
+            // ReadOnlySeString 再做**原始位元組序列比對**;而左邊原本又是 ECommons 的
+            // GetText()(把連字符 payload 整個丟掉)。鈕上的字只要帶一個 payload 就恆不相等,
+            // 不擲例外、不寫 log,表現是「明明按到召回卻還是排了下一輪派遣」。
+            var buttonText = new ReadOnlySeStringSpan(reassignButton->ButtonTextNode->NodeText.AsSpan()).ExtractText();
+            if (buttonText == Svc.Data.GetExcelSheet<Addon>(Svc.ClientState.ClientLanguage).GetRow(2365).Text.ExtractText()) // Recall
                 return;
 
             // must be throttled, there's a little delay after setup before this is enabled.
