@@ -1,6 +1,7 @@
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Plugin.Services;
 using ECommons.EzHookManager;
+using Serilog.Events;
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -14,8 +15,15 @@ public class Watcher : IDisposable
     [EzHook("E8 ?? ?? ?? ?? 0F B6 E8 8B 44 24 20", detourName: nameof(FireCallbackDetour), true)]
     private readonly EzHook<FireCallbackDelegate> FireCallbackHook = null!;
 
+    /// <summary>
+    /// 距離上一次 callback 超過這麼久就當作是新的一輪操作，重複的內容也重新印一次。
+    /// </summary>
+    private const long CallbackLogResetMs = 1000;
+
     private bool _wasDisableKeyPressed;
     private uint _lastTargetId;
+    private string? _lastLoggedCallback;
+    private long _lastCallbackLogTick;
 
     public string LastSeenDialogText { get; set; } = string.Empty;
     public string LastSeenOkText { get; set; } = string.Empty;
@@ -35,6 +43,8 @@ public class Watcher : IDisposable
     public Watcher()
     {
         EzSignatureHelper.Initialize(this);
+        // 只在載入時印一次；沒掛到時 detour 不會被呼叫，LastSeenListIndex 停在 0。
+        if (FireCallbackHook == null) PluginLog.Warning("[YesAlready] 特徵碼對不上（Watcher.FireCallbackHook）：記不到清單視窗選了第幾項，「加入上次看到的清單項目」會帶到清單的第一項；自動按選項不受影響。");
         Svc.Framework.Update += FrameworkUpdate;
     }
 
@@ -62,15 +72,16 @@ public class Watcher : IDisposable
 
         ForcedTalkKeyPressed = C.ForcedTalkKey != VirtualKey.NO_KEY && C.SeparateForcedKeys && Svc.KeyState[C.ForcedTalkKey];
 
+        // 每次取 Target 都會 new 一個包裝物件，這一幀只取一次、只在這一幀內用。
+        var target = Svc.Targets.Target;
+
         if (Svc.KeyState[VirtualKey.ESCAPE])
         {
             EscapeLastPressed = DateTime.Now;
-
-            var target = Svc.Targets.Target;
             EscapeTargetName = target != null ? target.Name.GetText() : string.Empty;
         }
 
-        if (Svc.Targets.Target is { DataId: var id })
+        if (target is { BaseId: var id })
         {
             if (id != _lastTargetId)
                 Service.Watcher.LastSelectedListEntry = null;
@@ -87,17 +98,13 @@ public class Watcher : IDisposable
 
         try
         {
-            var atkValueList = Enumerable.Range(0, valueCount)
-                .Select<int, object>(i => atkValues[i].Type switch
-                {
-                    ValueType.Int => atkValues[i].Int,
-                    ValueType.String => Marshal.PtrToStringUTF8(new IntPtr(atkValues[i].String)) ?? string.Empty,
-                    ValueType.UInt => atkValues[i].UInt,
-                    ValueType.Bool => atkValues[i].Byte != 0,
-                    _ => $"Unknown Type: {atkValues[i].Type}"
-                })
-                .ToList();
-            PluginLog.Debug($"[{nameof(Watcher)}] Callback triggered on {atkUnitBase->NameString} with values: {string.Join(", ", atkValueList.Select(value => value.ToString()))}");
+            // 這個 hook 每次 SelectString/SelectIconString 觸發 callback 都會進來，逐次印會
+            // 把整份 log 洗掉，而連續的內容幾乎都一模一樣。
+            // 只在內容跟上一次不同、或距離上一次超過 CallbackLogResetMs 毫秒時才印。
+            // LastSeenListIndex 照樣每次更新。
+            if (IsVerboseRecorded())
+                LogCallback(atkUnitBase, valueCount, atkValues);
+
             LastSeenListIndex = atkValues[0].Int;
         }
         catch (Exception ex)
@@ -106,5 +113,34 @@ public class Watcher : IDisposable
             return FireCallbackHook.Original(atkUnitBase, valueCount, atkValues, updateVisibility);
         }
         return FireCallbackHook.Original(atkUnitBase, valueCount, atkValues, updateVisibility);
+    }
+
+    // ECommons 把本外掛的 Svc.Log.MinimumLogLevel 固定成 Verbose，拿它判斷等於沒判斷；
+    // Verbose 真正會被寫下的只有兩種情況：Dalamud 全域等級開到 Verbose，或「紀錄」分頁勾了全部記錄。
+    private static bool IsVerboseRecorded()
+        => global::Dalamud.EntryPoint.LogLevelSwitch.MinimumLevel <= LogEventLevel.Verbose
+           || InternalLog.IsCaptureEnabled(LogEventLevel.Verbose);
+
+    private unsafe void LogCallback(AtkUnitBase* atkUnitBase, int valueCount, AtkValue* atkValues)
+    {
+        var atkValueList = Enumerable.Range(0, valueCount)
+            .Select<int, object>(i => atkValues[i].Type switch
+            {
+                ValueType.Int => atkValues[i].Int,
+                ValueType.String => Marshal.PtrToStringUTF8(new IntPtr(atkValues[i].String)) ?? string.Empty,
+                ValueType.UInt => atkValues[i].UInt,
+                ValueType.Bool => atkValues[i].Byte != 0,
+                _ => $"Unknown Type: {atkValues[i].Type}"
+            })
+            .ToList();
+        var message = $"[{nameof(Watcher)}] Callback triggered on {atkUnitBase->NameString} with values: {string.Join(", ", atkValueList.Select(value => value.ToString()))}";
+        var nowTick = Environment.TickCount64;
+        if (_lastCallbackLogTick == 0 || nowTick - _lastCallbackLogTick > CallbackLogResetMs
+            || !string.Equals(message, _lastLoggedCallback, StringComparison.Ordinal))
+        {
+            _lastLoggedCallback = message;
+            PluginLog.Verbose(message);
+        }
+        _lastCallbackLogTick = nowTick;
     }
 }

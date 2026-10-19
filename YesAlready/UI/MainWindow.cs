@@ -4,11 +4,13 @@ using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ECommons.GameHelpers;
+using ECommons.LanguageHelpers;
 using ECommons.Reflection;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using YesAlready.IPC;
 using YesAlready.UI.Tabs;
 using static YesAlready.UI.Tabs.CoreTab;
 
@@ -40,22 +42,52 @@ internal class MainWindow : Window
     private static TextFolderNode TalkRootFolder => C.TalkRootFolder;
     private static TextFolderNode NumericsRootFolder => C.NumericsRootFolder;
 
-    public override void PreDraw() => ImGui.PushStyleColor(ImGuiCol.ResizeGrip, 0);
-    public override void PostDraw() => ImGui.PopStyleColor();
+    // 🔴 Dalamud 的 Window.PreDraw/PostDraw 不是空實作:它們負責推/彈 ImGuiStyleVar.Alpha,
+    // 也就是 Dalamud 視窗設定裡的「每視窗不透明度」。override 掉而不呼叫 base,
+    // 使用者拉這個視窗的透明度就會**靜默無效** —— 沒有錯誤訊息,只是滑桿拉了沒反應。
+    // ⚠️ 兩支必須成對:base.PreDraw 推的 style var 只會由 base.PostDraw 彈掉。
+    // 自家的 PushStyleColor 夾在內側(push 在 base.PreDraw 之後、pop 在 base.PostDraw 之前),維持 LIFO 對稱。
+    public override void PreDraw()
+    {
+        base.PreDraw();
+        ImGui.PushStyleColor(ImGuiCol.ResizeGrip, 0);
+    }
+
+    public override void PostDraw()
+    {
+        ImGui.PopStyleColor();
+        base.PostDraw();
+    }
 
     public override void Draw()
     {
-        if (Service.BlockListHandler.Locked)
+        // 🔑 阻擋清單與壓制租約都會讓 YesAlready 停手，兩者都要顯示、
+        // 「強制解除鎖定」也要兩邊一起清 —— 只清一邊的話按鈕按了沒反應，
+        // 使用者會判定成「這個按鈕壞了」而不是「還有另一個外掛壓著」。
+        if (Suppressed)
         {
-            ECommons.ImGuiMethods.ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, $"Yes Already function is paused because following plugins have requested it: {Service.BlockListHandler.BlockList.Print()}");
-            if (ImGui.Button("Force unlock"))
+            // 🔑 列上（紅字）放的是「被誰壓著」——「有沒有問題」必須在列上看得見；
+            // 「每一筆還要多久才會自己解除」是「起疑才查」的資訊，放 tooltip 不佔版面。
+            ECommons.ImGuiMethods.ImGuiEx.TextWrapped(ImGuiColors.DalamudRed, "Yes Already function is paused because following plugins have requested it: ??".Loc(SuppressedBy() ?? ""));
+
+            if (ImGui.IsItemHovered())
             {
-                Service.BlockListHandler.BlockList.Clear();
+                var details = SuppressionDetails();
+                if (details.Length != 0)
+                    ImGuiX.TextTooltip(string.Join("\n", details));
+            }
+
+            if (ImGui.Button("Force unlock".Loc()))
+            {
+                // 🔴 走 ForceClear 而不是直接 BlockList.Clear()：那條路徑不會寫 log，
+                // 而清掉別人的阻擋登記是不可逆且對方不會察覺的破壞 —— 至少要留下誰被清掉的紀錄。
+                Service.BlockListHandler.ForceClear("使用者在設定視窗按下強制解除鎖定");
+                SuppressionLeases.ReleaseAll("使用者在設定視窗按下強制解除鎖定");
             }
         }
 
         var enabled = C.Enabled;
-        if (ImGui.Checkbox("Enabled", ref enabled))
+        if (ImGui.Checkbox("Enabled".Loc(), ref enabled))
         {
             C.Enabled = enabled;
             C.Save();
@@ -65,15 +97,15 @@ internal class MainWindow : Window
         if (tabs)
         {
             //coreTab.Draw();
-            DisplayGenericOptions("YesNo", YesNo.DrawButtons, () => DisplayNodes(YesNoRootFolder, () => new TextEntryNode() { Enabled = false, Text = "Add some text here!" }));
-            DisplayGenericOptions("Ok", Ok.DrawButtons, () => DisplayNodes(OkRootFolder, () => new OkEntryNode() { Enabled = false, Text = "Add some text here!" }));
-            DisplayGenericOptions("List", Lists.DrawButtons, () => DisplayNodes(ListRootFolder, () => new ListEntryNode() { Enabled = false, Text = "Add some text here!" }));
-            DisplayGenericOptions("Talk", Talk.DrawButtons, () => DisplayNodes(TalkRootFolder, () => new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" }));
-            DisplayGenericOptions("Numerics", Numerics.DrawButtons, () => DisplayNodes(NumericsRootFolder, () => new NumericsEntryNode() { Enabled = false, Text = "Add some text here!" }));
+            DisplayGenericOptions("YesNo".Loc(), YesNo.DrawButtons, () => DisplayNodes(YesNoRootFolder, () => new TextEntryNode() { Enabled = false, Text = "Add some text here!" }));
+            DisplayGenericOptions("Ok".Loc(), Ok.DrawButtons, () => DisplayNodes(OkRootFolder, () => new OkEntryNode() { Enabled = false, Text = "Add some text here!" }));
+            DisplayGenericOptions("List".Loc(), Lists.DrawButtons, () => DisplayNodes(ListRootFolder, () => new ListEntryNode() { Enabled = false, Text = "Add some text here!" }));
+            DisplayGenericOptions("Talk".Loc(), Talk.DrawButtons, () => DisplayNodes(TalkRootFolder, () => new TalkEntryNode { Enabled = false, TargetText = "Your text goes here" }));
+            DisplayGenericOptions("Numerics".Loc(), Numerics.DrawButtons, () => DisplayNodes(NumericsRootFolder, () => new NumericsEntryNode() { Enabled = false, Text = "Add some text here!" }));
             Bothers.Draw();
-            DisplayGenericOptions("Custom", Custom.DrawButtons, () => DisplayNodes(C.CustomRootFolder, () => new CustomEntryNode() { Enabled = false, Text = "Add some text here!" }));
+            DisplayGenericOptions("Custom".Loc(), Custom.DrawButtons, () => DisplayNodes(C.CustomRootFolder, () => new CustomEntryNode() { Enabled = false, Text = "Add some text here!" }));
             DisplayMiscOptions();
-            using (var tab = ImRaii.TabItem("Log"))
+            using (var tab = ImRaii.TabItem("Log".Loc()))
                 if (tab)
                     InternalLog.PrintImgui();
         }
@@ -91,9 +123,12 @@ internal class MainWindow : Window
     }
 
     private readonly XivChatType? selectedChannel;
+    // 下拉展開時每幀都要整份列舉；值與名稱執行期不變，建一次就好。預覽改用泛型 GetName（非泛型版會把值裝箱）。
+    private static readonly XivChatType[] ChatTypes = Enum.GetValues<XivChatType>();
+    private static readonly string[] ChatTypeNames = Array.ConvertAll(ChatTypes, t => t.ToString());
     private void DisplayMiscOptions()
     {
-        using var tab = ImRaii.TabItem("Settings");
+        using var tab = ImRaii.TabItem("Settings".Loc());
         if (!tab) return;
         using (ImRaii.PushId("Server info bar"))
         {
@@ -114,7 +149,7 @@ internal class MainWindow : Window
                     }
                     config.Call("QueueSave", []);
                 }
-                ImGuiX.IndentedTextColored($"Display the status of the {Name} in the Server Info Bar (DTR Bar). Clicking toggles the plugin.");
+                ImGuiX.IndentedTextColored("Display the status of the ?? in the Server Info Bar (DTR Bar). Clicking toggles the plugin.".Loc(Name));
             }
             catch (Exception e)
             {
@@ -122,15 +157,16 @@ internal class MainWindow : Window
             }
         }
 
-        using (var combo = ImRaii.Combo("###ChatChannelSelect", $"{Enum.GetName(typeof(XivChatType), C.MessageChannel)}"))
+        using (var combo = ImRaii.Combo("###ChatChannelSelect", $"{Enum.GetName(C.MessageChannel)}"))
         {
             if (combo)
             {
-                foreach (var type in Enum.GetValues<XivChatType>())
+                for (var i = 0; i < ChatTypes.Length; i++)
                 {
-                    using (ImRaii.PushId(type.ToString()))
+                    var type = ChatTypes[i];
+                    using (ImRaii.PushId(ChatTypeNames[i]))
                     {
-                        var selected = ImGui.Selectable($"{type}", type == selectedChannel);
+                        var selected = ImGui.Selectable(ChatTypeNames[i], type == selectedChannel);
 
                         if (selected)
                         {
@@ -141,7 +177,21 @@ internal class MainWindow : Window
                 }
             }
         }
-        ImGuiX.IndentedTextColored($"Select the chat channel for {Name} messages to output to.");
+        ImGuiX.IndentedTextColored("Select the chat channel for ?? messages to output to.".Loc(Name));
+
+        ImGui.Separator();
+
+        // 🔴 這一格是保險絲不是節流：真正處理「掛著鎖的外掛不在了」的是持有者存活檢查
+        // （BlockListHandler，外掛被停用／卸載就立刻移除），這裡只涵蓋「還活著但漏放」。
+        var blockListTimeout = C.BlockListEntryTimeoutMinutes;
+        if (ImGui.InputInt("Block list timeout (minutes, 0 = off)".Loc(), ref blockListTimeout, 10, 30))
+        {
+            if (blockListTimeout < 0) blockListTimeout = 0;
+            if (blockListTimeout > 1440) blockListTimeout = 1440;
+            C.BlockListEntryTimeoutMinutes = blockListTimeout;
+            C.Save();
+        }
+        ImGuiX.IndentedTextColored("How long another plugin may keep ?? paused before the entry is released automatically. Plugins that are no longer loaded are released immediately regardless of this setting.".Loc(Name));
     }
 
     // ====================================================================================================
@@ -198,7 +248,7 @@ internal class MainWindow : Window
             ImGui.PopStyleColor();
 
         if (!validRegex)
-            ImGuiX.TextTooltip("Invalid Text Regex");
+            ImGuiX.TextTooltip("Invalid Text Regex".Loc());
 
         if (ImGui.IsItemHovered())
         {
@@ -303,7 +353,7 @@ internal class MainWindow : Window
             {
                 ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, spacing);
 
-                if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add entry"))
+                if (ImGuiX.IconButton(FontAwesomeIcon.Plus, "Add entry".Loc()))
                 {
                     if (root == YesNoRootFolder)
                     {
@@ -320,7 +370,7 @@ internal class MainWindow : Window
                 }
 
                 ImGui.SameLine();
-                if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last seen as new entry"))
+                if (ImGuiX.IconButton(FontAwesomeIcon.SearchPlus, "Add last seen as new entry".Loc()))
                 {
                     if (root == YesNoRootFolder)
                     {
@@ -329,7 +379,7 @@ internal class MainWindow : Window
                         var createFolder = io.KeyShift;
                         var selectNo = io.KeyAlt;
 
-                        Configuration.CreateNode<TextEntryNode>(C.RootFolder, createFolder, zoneRestricted ? GenericHelpers.GetRow<Lumina.Excel.Sheets.TerritoryType>(Player.Territory)?.Name.ExtractText() : null, !selectNo);
+                        Configuration.CreateNode<TextEntryNode>(C.RootFolder, createFolder, zoneRestricted ? CurrentZone.TextForNewEntry() : null, !selectNo);
                         C.Save();
                     }
                     else if (root == OkRootFolder || root == NumericsRootFolder)
@@ -353,7 +403,7 @@ internal class MainWindow : Window
                 }
 
                 ImGui.SameLine();
-                if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder"))
+                if (ImGuiX.IconButton(FontAwesomeIcon.FolderPlus, "Add folder".Loc()))
                 {
                     var newNode = new TextFolderNode { Name = "Untitled folder" };
                     folderNode.Children.Add(newNode);
@@ -362,7 +412,7 @@ internal class MainWindow : Window
 
                 var trashWidth = ImGuiX.GetIconButtonWidth(FontAwesomeIcon.TrashAlt);
                 ImGui.SameLine(ImGui.GetContentRegionMax().X - trashWidth);
-                if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete"))
+                if (ImGuiX.IconButton(FontAwesomeIcon.TrashAlt, "Delete".Loc()))
                 {
                     if (C.TryFindParent(node, out var parentNode))
                     {
@@ -387,11 +437,11 @@ internal class MainWindow : Window
 
     public static string ComparisonTypeToText(ComparisonType comparisonType) => comparisonType switch
     {
-        ComparisonType.LessThan => "Less than",
-        ComparisonType.LessThanOrEqual => "Less than or equal",
-        ComparisonType.GreaterThan => "Greater than",
-        ComparisonType.GreaterThanOrEqual => "Greater than or equal",
-        ComparisonType.Equal => "Equal",
+        ComparisonType.LessThan => "Less than".Loc(),
+        ComparisonType.LessThanOrEqual => "Less than or equal".Loc(),
+        ComparisonType.GreaterThan => "Greater than".Loc(),
+        ComparisonType.GreaterThanOrEqual => "Greater than or equal".Loc(),
+        ComparisonType.Equal => "Equal".Loc(),
         _ => throw new Exception("Invalid enum value"),
     };
 
@@ -432,7 +482,8 @@ internal class MainWindow : Window
                 var targetRoot = GetRootFolder(targetNode);
 
                 // Only allow drag and drop within the same root folder
-                if (draggedRoot == targetRoot)
+                // Reject drops that would nest a folder under itself
+                if (draggedRoot == targetRoot && !WouldCreateLoop(DraggedNode, targetNode))
                 {
                     if (C.TryFindParent(DraggedNode, out var draggedNodeParent))
                     {
@@ -477,6 +528,26 @@ internal class MainWindow : Window
 
             ImGui.EndDragDropTarget();
         }
+    }
+
+    // moving a folder into itself or a descendant orphans the subtree from the root
+    private static bool WouldCreateLoop(ITextNode dragged, ITextNode target)
+    {
+        if (dragged is not TextFolderNode draggedFolder)
+            return false;
+
+        if (ReferenceEquals(target, draggedFolder))
+            return true;
+
+        var current = target;
+        while (C.TryFindParent(current, out var parent) && parent != null)
+        {
+            if (ReferenceEquals(parent, draggedFolder))
+                return true;
+            current = parent;
+        }
+
+        return false;
     }
 
     private static TextFolderNode GetRootFolder(ITextNode node)

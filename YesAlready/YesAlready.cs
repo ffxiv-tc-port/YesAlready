@@ -1,9 +1,12 @@
+using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Plugin;
 using ECommons.EzDTR;
 using ECommons.EzHookManager;
 using ECommons.GameHelpers;
+using ECommons.LanguageHelpers;
 using ECommons.SimpleGui;
 using ECommons.Singletons;
 using Lumina.Excel.Sheets;
@@ -13,6 +16,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using YesAlready.Interface;
+using YesAlready.IPC;
 using YesAlready.UI;
 
 namespace YesAlready;
@@ -26,75 +30,293 @@ public class YesAlready : IDalamudPlugin
     private const string Command = "/yesalready";
     private readonly string[] Aliases = ["/pyes"];
 
-    internal bool Active => C.Enabled && !Service.BlockListHandler.Locked;
+    /// <summary>YesAlready <b>現在會不會接手對話框</b>。</summary>
+    /// <remarks>
+    /// 🔴 這是複合值：使用者的開關 <c>C.Enabled</c>、阻擋清單、壓制租約<b>三者都要放行</b>。
+    /// IPC 的 <c>IsPluginEnabled</c> 回的是這個值，而 <c>SetPluginEnabled</c> 只寫第一項 ——
+    /// 讀寫不對稱是舊端點的既有語意，補救的查詢端點是 <c>IsUserEnabled</c>／<c>IsSuppressed</c>／
+    /// <c>GetSuppressionOwners</c>。
+    /// </remarks>
+    internal bool Active => C.Enabled && !Suppressed;
+
+    /// <summary>現在有沒有<b>別的外掛</b>把 YesAlready 壓著（阻擋清單或壓制租約任一有東西）。</summary>
+    internal static bool Suppressed => Service.BlockListHandler.Locked || SuppressionLeases.IsSuppressed;
+
+    /// <summary>目前壓著 YesAlready 的名字（阻擋清單 ＋ 壓制租約）；沒有就回 <see langword="null"/>。</summary>
+    /// <remarks>
+    /// ⚠️ 只給 UI／DTR 用：會配置字串，所以呼叫前先判 <see cref="Suppressed"/>。
+    /// 🔑 <b>「被誰壓著」必須在使用者看得到的地方</b> —— 否則症狀就是
+    /// 「YesAlready 突然不動了、全程零訊息、使用者以為外掛壞了」。
+    /// </remarks>
+    internal static string? SuppressedBy()
+    {
+        var owners = new List<string>(SuppressionLeases.Owners);
+
+        // ⚠️ 阻擋清單是 GetOrCreateData 出來的<b>跨外掛共用</b> HashSet：別的外掛隨時可能在
+        // 我們列舉它的當下增刪，而這支是<b>每幀</b>（DTR）被叫到的。真的撞上時
+        // InvalidOperationException 會從 EzDtr 的 Framework.Update 處理常式冒出去，
+        // 讓本外掛排在它後面的所有 Framework.Update 處理常式那個 tick 全部不被呼叫。
+        // 這裡只是要組一行給人看的字，撞到就少列幾個名字，不值得把整個 tick 賠進去。
+        try
+        {
+            owners.AddRange(Service.BlockListHandler.BlockList);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        return owners.Count == 0 ? null : string.Join("、", owners.Distinct(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// 「被誰壓著、還要多久才會自己解除」的逐列明細（壓制租約 ＋ 阻擋清單）。
+    /// </summary>
+    /// <remarks>
+    /// 🔑 <b>剩餘時間必須看得到</b>：兩條路徑現在都會自己到期，而「還要等多久」正是使用者
+    /// 決定「再等一下」還是「按強制解除鎖定」時唯一需要的資訊。
+    /// 📌 放 tooltip 而不是列上 —— 「有沒有被壓著」靠 DTR 圖示與設定視窗的紅字已經看得見，
+    /// tooltip 藏的是「為什麼」，不是「有沒有問題」。
+    /// ⚠️ 會配置字串與陣列，呼叫前先判 <see cref="Suppressed"/>。
+    /// </remarks>
+    internal static string[] SuppressionDetails()
+    {
+        var lines = new List<string>();
+        var leaseLabel = "Suppression lease".Loc();
+        var blockListLabel = "Block list".Loc();
+        var botherLabel = "Bother paused".Loc();
+
+        foreach (var (owner, remaining) in SuppressionLeases.Snapshot())
+            lines.Add($"{owner} — {leaseLabel}, {DescribeRemaining(remaining)}");
+
+        // 單一 bother 的暫停不會讓整個外掛變成「被壓著」（圖示照樣是綠點），所以它<b>只</b>在
+        // 這裡看得見 —— 沒有這幾行的話「某扇窗突然不自動按了」在 UI 上完全查不到原因。
+        foreach (var (key, remaining) in BotherPauses.Snapshot())
+            lines.Add($"{key} — {botherLabel}, {DescribeRemaining(remaining)}");
+
+        // 卸載途中（ECommonsMain.Dispose 已經把 singleton 設回 null）DTR 還可能被畫一次。
+        if (Service.BlockListHandler is { } handler)
+            foreach (var (owner, remaining) in handler.Snapshot())
+                lines.Add($"{owner} — {blockListLabel}, {DescribeRemaining(remaining)}");
+
+        return lines.ToArray();
+    }
+
+    /// <summary>把剩餘毫秒數講成人話；<c>-1</c>＝這一筆不會自動解除（使用者把時間逾時關掉了）。</summary>
+    private static string DescribeRemaining(long remainingMs)
+        => remainingMs < 0
+            ? "no auto-release".Loc()
+            : remainingMs < 60_000
+                ? "auto-releases shortly".Loc()
+                : "auto-releases in ?? min".Loc(remainingMs / 60_000);
 
     public YesAlready(IDalamudPluginInterface pluginInterface)
     {
         P = this;
         ECommonsMain.Init(pluginInterface, P);
 
+        // 🔴 守衛的幀計數器要排在本外掛所有其他 Framework.Update 訂閱之前：同一個外掛內部的
+        // Framework.Update 多播委派包在單一 try/catch 裡，排在前面的處理常式擲例外時，
+        // 後面所有處理常式那個 tick 完全不會被呼叫 —— 時鐘停住＝守衛的逃生口失準。
+        AddonPressGuard.EnsureWatching();
+
+        // bother 的啟用／停用請求要在 framework 執行緒上套用（見 BotherPauses）：訂閱排在
+        // 守衛之後，這樣守衛的時鐘永遠是第一個被叫到的那一個。
+        BotherPauses.EnsureWatching();
+
+        ECommons.LanguageHelpers.Localization.Init("ChineseTraditional");
+
         C = Svc.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         C.Migrate();
 
         SingletonServiceManager.Initialize(typeof(Service));
+
+        // Service.TaskManager 由 SingletonServiceManager 反射建出來（本外掛沒有自己 new 的地方），
+        // 所以逾時說明只能在這裡事後掛上。必須排在這一行之後、任何 Enqueue 之前 ——
+        // 七個 Enqueue 全在 Features 裡，而它們要到 ToggleFeatures(true) 才掛上監聽器。
+        TaskTimeoutLog.Attach(Service.TaskManager, Name);
+
         EzConfigGui.Init(new MainWindow().Draw);
         EzConfigGui.WindowSystem.AddWindow(new ZoneListWindow());
         EzConfigGui.WindowSystem.AddWindow(new ConditionsListWindow());
 
-        EzCmd.Add(Command, OnCommand, "Opens the plugin window.", int.MinValue);
+        EzCmd.Add(Command, OnCommand, "Opens the plugin window.".Loc(), int.MinValue);
         Aliases.Each(a => EzCmd.Add(a, OnCommand, $"{Command} alias"));
 
-        _ = new EzDtr(() => new SeString(new TextPayload($"{Name}: {(C.Enabled ? (Service.BlockListHandler.Locked ? "Paused" : "On") : "Off")}")), () => { C.Enabled ^= true; C.Save(); });
+        // 綠點＝運作中、禁止符號＝關閉／暫停：遊戲圖示字型沒有轉圈字符，所以用 IconPayload（BitmapFontIcon）而不是文字；
+        // 列上只剩圖示，確切狀態用文字寫在 tooltip。EzDtr 每幀只自動刷新 .Text、不刷新 .Tooltip，
+        // 所以 tooltip 在同一個每幀 Text 回呼裡順帶更新（回呼要到下一次 Framework.Update 才被叫到，
+        // 那時這個區域變數早已指派，初始式裡自我參照是安全的）。箭頭字符用來認出這一項是 YesAlready。
+        EzDtr yesAlreadyDtr = null!;
+        // 沒被壓著時，提示與圖示只由總開關與三段本地化文字決定：沒變就回傳上一次建好的同一個 SeString
+        // （同一個實例再設一次，Dalamud 端的比對也不必重新編碼）。
+        // 被壓著時提示含剩餘時間：圖示隨 (C.Enabled, suppressed) 當幀換，提示明細最多每 PausedRefreshMs 重建一次
+        // （剩餘時間以分鐘顯示，每幀重建只是白配置）。壓制狀態每幀只讀一次，提示與圖示用同一份。
+        const long PausedRefreshMs = 500;
+        SeString? steadyText = null;
+        (bool Enabled, string Status, string Left, string Right) steadyKey = default;
+        SeString? pausedText = null;
+        (bool Enabled, bool Suppressed) pausedKey = default;
+        long pausedRefreshAt = 0;
+        yesAlreadyDtr = new EzDtr(() =>
+        {
+            var suppressed = Suppressed;
+            var paused = suppressed || BotherPauses.Any;
+            (bool Enabled, string Status, string Left, string Right) key = default;
+            if (!paused)
+            {
+                pausedText = null;
+                key = (C.Enabled, C.Enabled ? "On".Loc() : "Off".Loc(), "Left click: toggle on/off".Loc(), "Right click: open/close settings".Loc());
+                if (steadyText != null && key == steadyKey)
+                    return steadyText;
+            }
+            else if (pausedText != null && pausedKey == (C.Enabled, suppressed) && Environment.TickCount64 < pausedRefreshAt)
+                return pausedText;
+
+            // 「被誰壓著、還剩多久」放 tooltip：它是「起疑才查」的資訊；而「有沒有被壓著」本身
+            // 靠列上的圖示（NoCircle）就看得見，不會變成看不見的「不知道」。
+            string[] suppressionDetails = paused ? SuppressionDetails() : [];
+            yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload(
+                $"{Name}: {(C.Enabled ? (suppressed ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
+                + (suppressionDetails.Length == 0 ? "" : "\n" + "Paused by: ??".Loc("\n  " + string.Join("\n  ", suppressionDetails)))
+                + "\n" + "Left click: toggle on/off".Loc()
+                + "\n" + "Right click: open/close settings".Loc()));
+            var text = new SeString(
+                new TextPayload(SeIconChar.ArrowRight.ToIconString()),
+                new IconPayload(C.Enabled && !suppressed ? BitmapFontIcon.GreenDot : BitmapFontIcon.NoCircle));
+            steadyText = paused ? null : text;
+            steadyKey = key;
+            if (paused)
+            {
+                pausedText = text;
+                pausedKey = (C.Enabled, suppressed);
+                pausedRefreshAt = Environment.TickCount64 + PausedRefreshMs;
+            }
+            return text;
+        });
+
+        // ⚠️ 點擊處理不能交給 EzDtr 的 onClick 參數：那個型別是 `Action`（收不到事件），
+        // 分不出左右鍵。而 EzDtr.OnUpdate 只在自己的 OnClick 非 null 時才每幀覆寫
+        // Entry.OnClick——所以這裡傳 null、改成自己設，才不會被它蓋掉。
+        yesAlreadyDtr.Entry!.OnClick = ev =>
+        {
+            // 右鍵開關設定視窗（再按一次關閉）；左鍵維持原本的啟用切換。
+            if (ev.ClickType == MouseClickType.Right)
+            {
+                EzConfigGui.Toggle();
+                return;
+            }
+            C.Enabled ^= true;
+            C.Save();
+        };
 
         LoadTerritories();
+        LogLegacyZoneEntries();
         ToggleFeatures(true);
 
         Svc.PluginInterface.UiBuilder.OpenMainUi += EzConfigGui.Toggle;
     }
 
+    /// <summary>
+    /// 外掛啟動時建起來、<b>實際掛著監聽器</b>的那一份功能實例。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這份清單存在的理由:<see cref="BaseFeature.Enabled"/> 與 <c>AddonFeature._attributes</c>
+    /// 都是<b>實例狀態</b>,而監聽器綁的是<b>某一個特定實例</b>的 <c>OnAddonEvent</c>。
+    /// 另外用 <c>Activator.CreateInstance</c> 造一個全新的實例的話,
+    /// 那個實例的 <c>Enabled</c> 恆為 <see langword="false"/>、<c>_attributes</c> 恆為
+    /// <see langword="null"/> ⇒ 查詢恆回「沒啟用」、<c>Disable()</c> 拆不掉真正註冊的那一組、
+    /// <c>Enable()</c> 反而再掛一組重複的監聽器(同一個 addon 事件被處理兩次)。
+    /// </remarks>
+    private static readonly List<BaseFeature> FeatureInstances = [];
+
     public static void ToggleFeatures(bool enable)
     {
-        var featureAssembly = Assembly.GetExecutingAssembly();
-
-        foreach (var type in featureAssembly.GetTypes())
+        if (FeatureInstances.Count == 0)
         {
-            if (typeof(BaseFeature).IsAssignableFrom(type) && !type.IsAbstract)
+            var featureAssembly = Assembly.GetExecutingAssembly();
+
+            foreach (var type in featureAssembly.GetTypes())
             {
-                if (Activator.CreateInstance(type) is BaseFeature feature)
+                if (typeof(BaseFeature).IsAssignableFrom(type) && !type.IsAbstract)
                 {
-                    if (enable)
-                        feature.Enable();
-                    else
-                        feature.Disable();
+                    if (Activator.CreateInstance(type) is BaseFeature feature)
+                        FeatureInstances.Add(feature);
                 }
             }
         }
+
+        foreach (var feature in FeatureInstances)
+        {
+            if (enable)
+                feature.Enable();
+            else
+                feature.Disable();
+        }
     }
 
-    public T? GetFeature<T>() where T : BaseFeature
+    /// <summary>照型別取得<b>實際註冊的</b>那一份功能實例;沒有就回 <see langword="null"/>。</summary>
+    public static BaseFeature? FindFeature(Type type)
     {
-        var type = typeof(T);
-
-        if (!typeof(BaseFeature).IsAssignableFrom(type) || type.IsAbstract)
-            return null;
-
-        if (Activator.CreateInstance(type) is T feature)
-            return feature;
-
+        foreach (var feature in FeatureInstances)
+            if (feature.GetType() == type)
+                return feature;
         return null;
     }
+
+    /// <summary>照名稱取得<b>實際註冊的</b>那一份功能實例(bother IPC 用)。</summary>
+    /// <remarks>
+    /// 先照 <see cref="Type.GetType(string)"/> 解 —— 那是這組 IPC 一開始的約定,名稱要含
+    /// 命名空間(例如 <c>YesAlready.Features.Talk</c>);解不出來再照 <see cref="BaseFeature.Key"/>
+    /// (＝類別簡名,例如 <c>Talk</c>)比對一次。
+    /// ⚠️ 後面那條是<b>加法</b>:原本認得的名稱行為逐字不變,只是多認得簡名 —— 呼叫端
+    /// (SomethingNeedDoing 把這三支 IPC 直接開給使用者的 Lua 巨集用)手上有的通常就是簡名。
+    /// </remarks>
+    public static BaseFeature? FindFeature(string name)
+    {
+        if (Type.GetType(name) is { } type && typeof(BaseFeature).IsAssignableFrom(type) && !type.IsAbstract
+            && FindFeature(type) is { } byType)
+            return byType;
+
+        foreach (var feature in FeatureInstances)
+            if (string.Equals(feature.Key, name, StringComparison.Ordinal))
+                return feature;
+        return null;
+    }
+
+    public T? GetFeature<T>() where T : BaseFeature => FindFeature(typeof(T)) as T;
 
     public void Dispose()
     {
         Svc.PluginInterface.UiBuilder.OpenMainUi -= EzConfigGui.Toggle;
+        // 租約是行程內的靜態狀態：外掛被停用／重載時一定要丟掉，否則重新載入之後
+        // 舊的租約還壓著，而它的租用者早就沒有那把 Guid 可以交回了。
+        SuppressionLeases.ReleaseAll("YesAlready 卸載");
+        BotherPauses.ReleaseAll("YesAlready 卸載");
+        AddonPressGuard.ForceTeardown();
         ECommonsMain.Dispose();
     }
 
     internal Dictionary<uint, string> TerritoryNames { get; private set; } = [];
 
+    /// <summary>TerritoryType 列 id → 內部代碼（Name 欄，舊版寫進區域欄的值）；只收非空的。</summary>
+    internal Dictionary<uint, string> TerritoryCodes { get; private set; } = [];
+
     private void LoadTerritories()
-        => TerritoryNames = GenericHelpers.FindRows<TerritoryType>(r => r.PlaceName.IsValid && !r.PlaceName.Value.Name.IsEmpty)
+    {
+        TerritoryNames = GenericHelpers.FindRows<TerritoryType>(r => r.PlaceName.IsValid && !r.PlaceName.Value.Name.IsEmpty)
             .Select((r, n) => (r.RowId, PlaceName: r.PlaceName.Value.Name.ToString())).ToDictionary(t => t.RowId, t => t.PlaceName);
+        TerritoryCodes = GenericHelpers.FindRows<TerritoryType>(r => !r.Name.IsEmpty)
+            .ToDictionary(r => r.RowId, r => r.Name.ExtractText());
+    }
+
+    private void LogLegacyZoneEntries()
+    {
+        var codes = new HashSet<string>(TerritoryCodes.Values, StringComparer.OrdinalIgnoreCase);
+        var count = C.GetAllNodes().OfType<IZoneRestrictedNode>()
+            .Count(n => n.ZoneRestricted && ZoneTextRules.LooksLikeLegacyCode(n.ZoneText, n.ZoneIsRegex, codes));
+        if (count > 0)
+            PluginLog.Information($"[ZoneRestriction] 設定裡有 {count} 條「限定區域」的區域欄是內部代碼（舊版寫入的形式），比對時會當成那個區域；設定檔不改寫。");
+    }
 
     #region Commands
 
@@ -157,19 +379,19 @@ public class YesAlready : IDalamudPlugin
     private static void CommandHelpMenu()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Help menu");
-        sb.AppendLine($"{Command} - Toggle the config window.");
-        sb.AppendLine($"{Command} toggle - Toggle the plugin on/off.");
-        sb.AppendLine($"{Command} last - Add the last seen YesNo dialog.");
-        sb.AppendLine($"{Command} last no - Add the last seen YesNo dialog as a no.");
-        sb.AppendLine($"{Command} last zone - Add the last seen YesNo dialog with the current zone name.");
-        sb.AppendLine($"{Command} last zone no - Add the last seen YesNo dialog with the current zone name as a no.");
-        sb.AppendLine($"{Command} last zone folder - Add the last seen YesNo dialog with the current zone name in a folder with the current zone name.");
-        sb.AppendLine($"{Command} last zone folder no - Add the last seen YesNo dialog with the current zone name in a folder with the current zone name as a no.");
-        sb.AppendLine($"{Command} lastlist - Add the last selected list dialog with the target at the time.");
-        sb.AppendLine($"{Command} lasttalk - Add the last seen target during a Talk dialog.");
-        sb.AppendLine($"{Command} dutyconfirm - Toggle duty confirm.");
-        sb.AppendLine($"{Command} onetimeconfirm - Toggles duty confirm as well as one-time confirm.");
+        sb.AppendLine("Help menu".Loc());
+        sb.AppendLine($"{Command} - " + "Toggle the config window.".Loc());
+        sb.AppendLine($"{Command} toggle - " + "Toggle the plugin on/off.".Loc());
+        sb.AppendLine($"{Command} last - " + "Add the last seen YesNo dialog.".Loc());
+        sb.AppendLine($"{Command} last no - " + "Add the last seen YesNo dialog as a no.".Loc());
+        sb.AppendLine($"{Command} last zone - " + "Add the last seen YesNo dialog with the current zone name.".Loc());
+        sb.AppendLine($"{Command} last zone no - " + "Add the last seen YesNo dialog with the current zone name as a no.".Loc());
+        sb.AppendLine($"{Command} last zone folder - " + "Add the last seen YesNo dialog with the current zone name in a folder with the current zone name.".Loc());
+        sb.AppendLine($"{Command} last zone folder no - " + "Add the last seen YesNo dialog with the current zone name in a folder with the current zone name as a no.".Loc());
+        sb.AppendLine($"{Command} lastlist - " + "Add the last selected list dialog with the target at the time.".Loc());
+        sb.AppendLine($"{Command} lasttalk - " + "Add the last seen target during a Talk dialog.".Loc());
+        sb.AppendLine($"{Command} dutyconfirm - " + "Toggle duty confirm.".Loc());
+        sb.AppendLine($"{Command} onetimeconfirm - " + "Toggles duty confirm as well as one-time confirm.".Loc());
         Svc.Chat.PrintPluginMessage(sb);
     }
 
@@ -183,10 +405,10 @@ public class YesAlready : IDalamudPlugin
             return;
         }
 
-        Configuration.CreateNode<TextEntryNode>(C.RootFolder, createFolder, zoneRestricted ? GenericHelpers.GetRow<TerritoryType>(Player.Territory)?.Name.ExtractText() : null, !selectNo);
+        Configuration.CreateNode<TextEntryNode>(C.RootFolder, createFolder, zoneRestricted ? CurrentZone.TextForNewEntry() : null, !selectNo);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new text entry.");
+        Svc.Chat.PrintPluginMessage("Added a new text entry.".Loc());
     }
 
     private void CommandAddOkNode(bool createFolder)
@@ -202,7 +424,7 @@ public class YesAlready : IDalamudPlugin
         Configuration.CreateNode<OkEntryNode>(C.RootFolder, createFolder);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new text entry.");
+        Svc.Chat.PrintPluginMessage("Added a new text entry.".Loc());
     }
 
     private void CommandAddListNode()
@@ -228,7 +450,7 @@ public class YesAlready : IDalamudPlugin
         parent.Children.Add(newNode);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new list entry.");
+        Svc.Chat.PrintPluginMessage("Added a new list entry.".Loc());
     }
 
     private void CommandAddTalkNode()
@@ -247,7 +469,7 @@ public class YesAlready : IDalamudPlugin
         parent.Children.Add(newNode);
         C.Save();
 
-        Svc.Chat.PrintPluginMessage("Added a new talk entry.");
+        Svc.Chat.PrintPluginMessage("Added a new talk entry.".Loc());
     }
 
     private void ToggleDutyConfirm()
@@ -256,8 +478,8 @@ public class YesAlready : IDalamudPlugin
         C.ContentsFinderOneTimeConfirmEnabled = false;
         C.Save();
 
-        var state = C.ContentsFinderConfirmEnabled ? "enabled" : "disabled";
-        Svc.Chat.PrintPluginMessage($"Duty Confirm {state}.");
+        var state = C.ContentsFinderConfirmEnabled ? "enabled".Loc() : "disabled".Loc();
+        Svc.Chat.PrintPluginMessage("Duty Confirm ??.".Loc(state));
     }
 
     private void ToggleOneTimeConfirm()
@@ -266,8 +488,8 @@ public class YesAlready : IDalamudPlugin
         C.ContentsFinderConfirmEnabled = C.ContentsFinderOneTimeConfirmEnabled;
         C.Save();
 
-        var state = C.ContentsFinderOneTimeConfirmEnabled ? "enabled" : "disabled";
-        Svc.Chat.PrintPluginMessage($"Duty Confirm and One Time Confirm {state}.");
+        var state = C.ContentsFinderOneTimeConfirmEnabled ? "enabled".Loc() : "disabled".Loc();
+        Svc.Chat.PrintPluginMessage("Duty Confirm and One Time Confirm ??.".Loc(state));
     }
 
     #endregion

@@ -7,6 +7,7 @@ using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using System;
 using System.Collections.Generic;
+using YesAlready.IPC;
 
 namespace YesAlready.Features;
 
@@ -17,27 +18,85 @@ internal class SatisfactionSupply : AddonFeature
 
     private static bool Disabled;
     private static List<int> SlotsFilled { get; set; } = [];
-    private static ulong RequestAllow;
+    /// <summary>Request 視窗開啟後要再等到哪一幀才允許交出。0 ＝還沒開始等。</summary>
+    /// <remarks>
+    /// 幀號來自 <see cref="AddonPressGuard.CurrentFrame"/>（見那裡的說明：<c>UiBuilder.FrameCount</c>
+    /// 在過場動畫期間會停住）。型別跟著它一起是 <see langword="long"/>。
+    /// 📌 <c>0</c> 當哨兵是安全的：<c>CurrentFrame</c> 從 0 起算且只增，<c>+ 4</c> 之後最小是 4。
+    /// </remarks>
+    private static long RequestAllow;
+
+    /// <summary>交納送出後 Request 一直沒出現時，最多再補送幾次、每次隔幾幀；到上限就停到這扇窗重開。</summary>
+    private const int TurnInMaxSends = 5;
+    private const long TurnInResendFrames = 60;
+    /// <summary>上一次看到 Request 之後送出交納的次數；看到 Request（＝交納生效）或重開窗就歸零。</summary>
+    private static int turnInSends;
+    /// <summary>下一次允許送交納的幀（<see cref="AddonPressGuard.CurrentFrame"/> 座標）；0＝立刻。</summary>
+    private static long turnInNextFrame;
 
     protected override unsafe void HandleAddonEvent(AddonEvent eventType, AddonArgs addonInfo, AtkUnitBase* atk)
     {
         if (Disabled || !GenericHelpers.IsAddonReady(atk)) return;
+
+        // AgentSatisfactionSupply.Instance() 走 CS 的 [Agent] 產生器,合法會回 null。這支是 addon 事件回呼,實務上代理人
+        // 幾乎一定活著 —— 但「幾乎一定」不是守衛,而解參考 null 是攔不到的 AccessViolation。
+        // 取一次本地指標、判空後在同一次回呼內重用,不跨幀保存。
+        var agent = AgentSatisfactionSupply.Instance();
+        if (agent == null)
+        {
+            // fail-closed:這一次回呼不交任何東西。addon 還開著的話下次 PostUpdate 會再進來重試。
+            return;
+        }
+
+        if (GenericHelpers.TryGetAddonByName<AtkUnitBase>("Request", out var _))
+        {
+            ResetTurnInAttempts();
+            return;
+        }
+        if (AddonPressGuard.CurrentFrame < turnInNextFrame) return;
+        if (turnInSends >= TurnInMaxSends)
+        {
+            PluginLog.Information($"[SatisfactionSupply] 交納已送出 {turnInSends} 次，交納視窗（Request）一直沒出現，停止自動交納，直到重新開啟老主顧交易視窗。");
+            Disabled = true;
+            return;
+        }
+
         var reader = new ReaderSatisfactionSupply(atk);
+        var sent = false;
 
         foreach (var (value, index) in reader.Quantities.WithIndex())
         {
-            if (value != 0 && !GenericHelpers.TryGetAddonByName<AtkUnitBase>("Request", out var _))
+            if (value != 0)
             {
-                if (reader.WillItemOvercap(AgentSatisfactionSupply.Instance()->Items[index], Log))
+                if (reader.WillItemOvercap(agent->Items[index], Log))
                 {
                     Svc.Chat.PrintPluginMessage("Further turn in will overcap scrips.");
                     Disabled = true;
                     return;
                 }
-                Log($"Turning in item #{AgentSatisfactionSupply.Instance()->Items[index].Id}");
+                // 送出交付事件之後 SatisfactionSupply 本身不會關（它開出 Request 子視窗），
+                // 所以歸「多次互動窗」：守衛擋掉的是「Request 還沒出現就每一幀重送」，
+                // 補送的間隔與次數上限由 turnInNextFrame／TurnInMaxSends 管。粒度含 index —— 同一幀對不同格各送一次是正常流程。
+                // 真正的危險形狀是使用者自己把 SatisfactionSupply 關掉、還有剩餘數量而 Request 不在時，
+                // 關閉中的那幾幀 PostUpdate 仍會進來。
+                if (!AddonPressGuard.TryBeginRoutinePress(addonInfo.AddonName, atk, $"turnin:{index}")) continue;
+
+                Log($"Turning in item #{agent->Items[index].Id}");
                 Callback.Fire(atk, false, 1, index);
+                sent = true;
             }
         }
+        if (sent)
+        {
+            turnInSends++;
+            turnInNextFrame = AddonPressGuard.CurrentFrame + TurnInResendFrames;
+        }
+    }
+
+    private static void ResetTurnInAttempts()
+    {
+        turnInSends = 0;
+        turnInNextFrame = 0;
     }
 
     public override void Enable()
@@ -56,7 +115,11 @@ internal class SatisfactionSupply : AddonFeature
         Svc.AddonLifecycle.UnregisterListener(Reset);
     }
 
-    private void Reset(AddonEvent type, AddonArgs args) => Disabled = false;
+    private void Reset(AddonEvent type, AddonArgs args)
+    {
+        Disabled = false;
+        ResetTurnInAttempts();
+    }
 
     private static unsafe void RequestFill(IFramework framework)
     {
@@ -65,6 +128,10 @@ internal class SatisfactionSupply : AddonFeature
 
         if (GenericHelpers.TryGetAddonByName<AddonRequest>("Request", out var addon) && GenericHelpers.IsAddonReady((AtkUnitBase*)addon))
         {
+            ResetTurnInAttempts();
+            // TextAdvance 也會填／交同一扇 Request，兩邊守衛互相看不見 ⇒ 它會處理（或確認不了）時讓位，同一扇窗只有一個主人。
+            if (TextAdvanceIpc.Query(TextAdvanceIpc.RequestFill, "SatisfactionSupply.RequestFill") != TextAdvanceIpc.Handling.NotHandling)
+                return;
             for (var i = 1; i <= addon->EntryCount; i++)
             {
                 if (SlotsFilled.Contains(addon->EntryCount))
@@ -74,7 +141,10 @@ internal class SatisfactionSupply : AddonFeature
                 }
                 if (SlotsFilled.Contains(i)) return;
                 var val = i;
-                Service.TaskManager.Enqueue(() => TryClickItem(addon, val));
+                // 🔴🔴 這個 lambda 最快也是下一個 tick 才跑,絕對不能把上面那個 AddonRequest*
+                // 捕獲進去 —— 捕獲＝跨幀保存原生指標,視窗被拆掉之後解參考就是攔不到的存取違規。
+                // 只把「第幾格」帶進去,視窗留給執行的當下重新解析。
+                Service.TaskManager.Enqueue(() => TryFillRequestSlot(val));
             }
         }
         else
@@ -84,9 +154,28 @@ internal class SatisfactionSupply : AddonFeature
         }
     }
 
-    private static unsafe bool? TryClickItem(AddonRequest* addon, int i)
+    /// <summary>
+    /// 在交納視窗上把第 <paramref name="i"/> 格填好。<b>視窗是在執行的當下才解析的。</b>
+    /// </summary>
+    /// <remarks>
+    /// 🔴 不收 <c>AddonRequest*</c> 參數:這支最快也是下一個 tick 才跑,把排入佇列那一幀取到的指標帶進來就是
+    /// 跨幀保存原生指標,視窗被拆掉之後解參考是攔不到的 <c>AccessViolationException</c>;執行的當下重新解析。
+    /// 📌 重解不會對到別的一扇:排入端(<see cref="RequestFill"/>)用的是同一支 <c>TryGetAddonByName</c> 查 index 1。
+    /// ⚠️ 視窗不在就回 <see langword="false"/>(＝這一輪沒做完、下個 tick 再來),不是
+    /// <see langword="null"/>(null 會清掉整條佇列)。Request 真的收掉時 <see cref="RequestFill"/>
+    /// 會走 else 分支 Abort();就算沒走到,NeoTaskManager 的 30 秒逾時也會把佇列清乾淨。
+    /// </remarks>
+    private static unsafe bool? TryFillRequestSlot(int i)
     {
         if (SlotsFilled.Contains(i)) return true;
+        // 排入之後才換主人（被租約壓住、或 TextAdvance 接手）時丟掉這筆；還輪到我們時 RequestFill 下一幀會重排。
+        if (!P.Active || !C.CustomDeliveries
+            || TextAdvanceIpc.Query(TextAdvanceIpc.RequestFill, "SatisfactionSupply.RequestFill") != TextAdvanceIpc.Handling.NotHandling)
+            return true;
+
+        if (!GenericHelpers.TryGetAddonByName<AddonRequest>("Request", out var addon)
+            || !GenericHelpers.IsAddonReady((AtkUnitBase*)addon))
+            return false;
 
         var contextMenu = (AtkUnitBase*)Svc.GameGui.GetAddonByName("ContextIconMenu", 1).Address;
 
@@ -95,12 +184,23 @@ internal class SatisfactionSupply : AddonFeature
             var slot = i - 1;
             var unk = 44 * i + (i - 1);
 
-            Callback.Fire(&addon->AtkUnitBase, false, 2, slot, 0, 0);
+            // 這一發是「在 Request 上開出該格的選單」，Request 不會因此關閉 ⇒ 多次互動窗。
+            // 擋掉的是「選單一直沒開起來就每個 tick 重送」；被擋下時照樣回 false
+            // （＝這一輪沒做完、下個 tick 再來）。
+            if (AddonPressGuard.TryBeginRoutinePress("Request", &addon->AtkUnitBase, $"slot:{slot}"))
+                Callback.Fire(&addon->AtkUnitBase, false, 2, slot, 0, 0);
 
             return false;
         }
         else
         {
+            // 🔴 選單按下即關。NeoTaskManager 一個 framework tick 只跑一次 CurrentTask，
+            // 下一個 tick 換下一格的 TryClickItem 進來時選單正在關閉中 ——
+            // GetAddonByName 仍回實例、IsVisible 仍為真，於是走到這裡對關閉中的選單再送一發＝AVE。
+            // 被擋下時回 false（＝這一輪沒按到、下個 tick 再來），不是 null（null 會清掉整條佇列），
+            // 也不把這一格記成「已填」。
+            if (!AddonPressGuard.TryBeginPress("ContextIconMenu", contextMenu)) return false;
+
             Callback.Fire(contextMenu, false, 0, 0, 1021003, 0, 0);
             PluginLog.Debug($"Filled slot {i}");
             SlotsFilled.Add(i);
@@ -115,14 +215,24 @@ internal class SatisfactionSupply : AddonFeature
 
         if (GenericHelpers.TryGetAddonByName<AtkUnitBase>("Request", out var addon) && GenericHelpers.IsAddonReady(addon))
         {
+            // 🔴🔴 這一支訂閱在 Svc.Framework.Update（見 Enable()），每個遊戲 tick 都會進來，所以「等 4 幀」的閘門
+            // 必須讀 AddonPressGuard.CurrentFrame（自己掛在 Framework.Update 上數的），不可以讀 UiBuilder.FrameCount：
+            // 那個計數器在隱藏 UI／過場動畫／GPose 期間完全不前進 ⇒ 交納途中放過場時整個流程靜默卡死。
+            // ⚠️ 兩個計數器的絕對值不同，不可以一邊存一邊讀。
             if (RequestAllow == 0)
-                RequestAllow = Svc.PluginInterface.UiBuilder.FrameCount + 4;
+                RequestAllow = AddonPressGuard.CurrentFrame + 4;
 
-            if (Svc.PluginInterface.UiBuilder.FrameCount < RequestAllow) return;
+            if (AddonPressGuard.CurrentFrame < RequestAllow) return;
             var m = new AddonMaster.Request(addon);
-            if (m.IsHandOverEnabled && m.IsFilled)
+            if (m.IsHandOverEnabled && m.IsFilled
+                && TextAdvanceIpc.Query(TextAdvanceIpc.RequestHandin, "SatisfactionSupply.RequestComplete") == TextAdvanceIpc.Handling.NotHandling)
             {
-                if (EzThrottler.Throttle("Handin"))
+                // 🔴 交出之後 Request 就關掉了。EzThrottler 記的是「上一次動作在哪個時刻」而不是
+                // 「這扇窗按過了」，低 FPS 時 500 毫秒可能還落在關閉中的那幾幀裡；按鈕啟用檢查同樣不算防護
+                //（m.IsFilled 在 vendored ECommons 裡迴圈永不執行、恆回 true，更是等於沒檢查）。
+                // 節流先判、守衛後判：守衛一回 true 就已經登記，登記完卻因為節流沒按會白白封鎖到逃生口。
+                // 交出是 Request 的終結按法（不帶參數）：它還熱著時守衛連同一扇窗的填格也一起擋。
+                if (EzThrottler.Throttle("Handin") && AddonPressGuard.TryBeginPress("Request", addon))
                 {
                     PluginLog.Debug("Handing over request");
                     m.HandOver();
@@ -141,32 +251,66 @@ public unsafe class ReaderSatisfactionSupply(AtkUnitBase* UnitBase, int BeginOff
     public int MinBotQuantity => ReadInt(31) ?? 0;
     public int FshQuantity => ReadInt(40) ?? 0;
 
-    public AgentSatisfactionSupply.ItemInfo DoHItem => AgentSatisfactionSupply.Instance()->Items[0];
-    public AgentSatisfactionSupply.ItemInfo MinBotItem => AgentSatisfactionSupply.Instance()->Items[1];
-    public AgentSatisfactionSupply.ItemInfo FshItem => AgentSatisfactionSupply.Instance()->Items[2];
+    // 下面五個成員目前在本 repo 沒有任何呼叫端(保留不刪),但它們都是裸解參考
+    // AgentSatisfactionSupply.Instance() —— 該取得器合法會回 null,一旦有人開始用就是
+    // 攔不到的 AccessViolation。所以都帶守衛,退化值取各自真正中性的那個:
+    // ItemInfo 回 default(Id 為 0,呼叫端本來就得當成「沒有這個項目」),Span 回空跨度。
+    public AgentSatisfactionSupply.ItemInfo DoHItem => GetItemInfo(0);
+    public AgentSatisfactionSupply.ItemInfo MinBotItem => GetItemInfo(1);
+    public AgentSatisfactionSupply.ItemInfo FshItem => GetItemInfo(2);
 
-    public Span<uint> CraftScripIds => AgentSatisfactionSupply.Instance()->CrafterScripIds;
-    public Span<uint> GatherScripIds => AgentSatisfactionSupply.Instance()->GathererScripIds;
+    private static AgentSatisfactionSupply.ItemInfo GetItemInfo(int index)
+    {
+        var agent = AgentSatisfactionSupply.Instance();
+        if (agent == null) return default;
+        return agent->Items[index];
+    }
+
+    public Span<uint> CraftScripIds
+    {
+        get
+        {
+            var agent = AgentSatisfactionSupply.Instance();
+            if (agent == null) return default;
+            return agent->CrafterScripIds;
+        }
+    }
+
+    public Span<uint> GatherScripIds
+    {
+        get
+        {
+            var agent = AgentSatisfactionSupply.Instance();
+            if (agent == null) return default;
+            return agent->GathererScripIds;
+        }
+    }
 
     public bool WillItemOvercap(AgentSatisfactionSupply.ItemInfo item, Action<string> log)
     {
+        // CurrencyManager.Instance() 在 CS 裡是 [StaticAddress(..., isPointer: true)] —— 讀的是「指標的位址」,
+        // 遊戲還沒把那個管理器配起來時真的會回 null,解參考就是攔不到的 AVE。
+        // 取一次本地指標、判空後重用。
+        var currency = CurrencyManager.Instance();
+        if (currency == null)
+            throw new Exception("CurrencyManager unavailable; cannot tell whether the reward would overcap");
         if (GetItem(item.Id) is { SpiritbondOrCollectability: var collectability })
         {
             log($"Checking overcap for item #{item.Id} with collectability {collectability}");
             if (collectability > item.Collectability3)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[2]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[2]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[2] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[2];
+                log($"Item #{item.Id} [{item.Reward1Quantity[2]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[2]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[2] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[2];
             }
             if (collectability > item.Collectability2)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[1]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[1]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[1] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[1];
+                log($"Item #{item.Id} [{item.Reward1Quantity[1]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[1]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[1] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[1];
             }
             if (collectability > item.Collectability1)
             {
-                log($"Item #{item.Id} [{item.Reward1Quantity[0]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[0]} > {CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id)}]");
-                return CurrencyManager.Instance()->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[0] || CurrencyManager.Instance()->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[0];
+                log($"Item #{item.Id} [{item.Reward1Quantity[0]} > {currency->GetItemCountRemaining(item.Reward1Id)} || {item.Reward2Quantity[0]} > {currency->GetItemCountRemaining(item.Reward2Id)}]");
+                return currency->GetItemCountRemaining(item.Reward1Id) < item.Reward1Quantity[0] || currency->GetItemCountRemaining(item.Reward2Id) < item.Reward2Quantity[0];
             }
         }
         throw new Exception($"Failed to find item [{item.Id}] in inventory");

@@ -12,6 +12,19 @@ public partial class Configuration() : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
     public bool Enabled { get; set; } = true;
+    /// <summary>
+    /// 阻擋清單（共享資料 <c>"YesAlready.StopRequests"</c>）裡的一筆最多可以連續掛多少分鐘；
+    /// <c>0</c>＝不做時間逾時。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 這是<b>保險絲不是節流</b>：真正處理「掛著鎖的外掛不在了」的是
+    /// <see cref="IPC.BlockListHandler"/> 的持有者存活檢查（外掛被停用／卸載就立刻移除），
+    /// 這一格只涵蓋「外掛還活著、只是漏放」。
+    /// ⚠️ 預設訂得寬（120 分鐘）是刻意的：六個已知消費端沒有一個會連續掛超過幾分鐘，
+    /// 而<b>誤殺的代價遠大於晚幾十分鐘才自癒</b> —— 被誤殺的呼叫端全是邊緣觸發，
+    /// 不會知道自己的鎖沒了、也不會重新放回去。
+    /// </remarks>
+    public int BlockListEntryTimeoutMinutes { get; set; } = 120;
     public XivChatType MessageChannel { get; set; } = Svc.PluginInterface.GeneralChatType;
 
     public VirtualKey ForcedYesKey { get; set; } = VirtualKey.NO_KEY;
@@ -50,6 +63,10 @@ public partial class Configuration() : IPluginConfiguration
     public bool RetainerTransferProgressConfirm { get; set; } = false;
     public bool DesynthesisResults { get; set; } = false;
     public bool AetherialReductionResults { get; set; } = false;
+
+    /// <summary>精選結果視窗出現時替使用者按下遊戲自己的「自動」鈕（預設關）。</summary>
+    public bool AetherialReductionAutomatic { get; set; } = false;
+
     public bool FashionCheckQuit { get; set; } = false;
     public bool LordOfVerminionQuit { get; set; } = false;
     public bool ChocoboRacingQuit { get; set; } = false;
@@ -57,6 +74,13 @@ public partial class Configuration() : IPluginConfiguration
     public bool GimmickYesNo { get; set; } = false;
     public bool AutoCollectable { get; set; } = false;
     public bool LotteryWeeklyInput { get; set; } = false;
+
+    /// <summary>夢幻彩券的號碼來源；預設維持原本的隨機，改動不影響既有使用者。</summary>
+    public JumboCactpotNumberMode LotteryWeeklyNumberMode { get; set; } = JumboCactpotNumberMode.Random;
+
+    /// <summary><see cref="JumboCactpotNumberMode.Fixed"/> 時使用的號碼（0–9999）。</summary>
+    public int LotteryWeeklyFixedNumber { get; set; } = 0;
+
     public bool TradeMultiple { get; set; } = false;
     public TradeMultipleMode TransmuteMode { get; set; } = TradeMultipleMode.AllSame;
     public bool KupoOfFortune { get; set; } = false;
@@ -83,6 +107,16 @@ public partial class Configuration() : IPluginConfiguration
         public bool UpdateState { get; set; } = true;
         public string CallbackParams { get; set; } = string.Empty;
         public bool Enabled { get; set; } = true;
+    }
+
+    /// <summary>夢幻彩券的號碼來源。</summary>
+    public enum JumboCactpotNumberMode
+    {
+        /// <summary>每次隨機（原本唯一的行為）。</summary>
+        Random = 0,
+
+        /// <summary>固定使用 <see cref="Configuration.LotteryWeeklyFixedNumber"/>。</summary>
+        Fixed = 1,
     }
 
     public enum TradeMultipleMode

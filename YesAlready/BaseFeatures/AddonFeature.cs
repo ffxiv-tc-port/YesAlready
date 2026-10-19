@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using YesAlready.IPC;
 
 namespace YesAlready.BaseFeatures;
 
@@ -37,7 +38,9 @@ public abstract class AddonFeature : BaseFeature
 
     protected virtual unsafe void OnAddonEvent(AddonEvent eventType, AddonArgs addonInfo)
     {
-        if (!P.Active || !IsEnabled()) return;
+        // 🔴 IPC 的 PauseBother／SetBotherEnabled 不去拆監聽器（那是跨執行緒改 Dalamud 的
+        // 裸 List），而是在這裡讓開。常態是兩個欄位讀取，沒有配置也沒有上鎖。
+        if (!P.Active || !IsEnabled() || BotherPauses.IsMuted(Key)) return;
         HandleAddonEvent(eventType, addonInfo, (AtkUnitBase*)addonInfo.Addon.Address);
     }
 
@@ -47,4 +50,10 @@ public abstract class AddonFeature : BaseFeature
     protected void Log(string msg) => PluginLog.Debug($"[{GetType().Name}] {msg}");
     protected void LogVerbose(string message) => PluginLog.Verbose($"[{GetType().Name}] {message}");
     protected void LogError(string message) => PluginLog.Error($"[{GetType().Name}] {message}");
+
+    /// <summary>Verbose 現在會不會被寫下（Dalamud 全域等級，或 ECommons 遊戲內紀錄）。</summary>
+    /// <remarks>內插字串在 log 閘門之外求值：每幀都會走的比對路徑要先判再組字串。</remarks>
+    protected static bool VerboseRecorded
+        => global::Dalamud.EntryPoint.LogLevelSwitch.MinimumLevel <= Serilog.Events.LogEventLevel.Verbose
+           || InternalLog.IsCaptureEnabled(Serilog.Events.LogEventLevel.Verbose);
 }

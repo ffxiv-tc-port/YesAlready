@@ -29,6 +29,8 @@ internal class InclusionShop : AddonFeature
     public InclusionShop()
     {
         EzSignatureHelper.Initialize(this);
+        // 只在載入時印一次；沒掛到時 detour 不會被呼叫，其餘照常。
+        if (agentReceiveEventHook == null) PluginLog.Warning("[YesAlready] 特徵碼對不上（InclusionShop.agentReceiveEventHook）：記不到 InclusionShop 視窗上次選的分類，開啟時沿用先前記下的那一組。");
     }
 
     private unsafe IntPtr AgentReceiveEventDetour(IntPtr agent, IntPtr eventData, AtkValue* values, uint valueCount, ulong eventKind)

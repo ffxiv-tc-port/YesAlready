@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using YesAlready.IPC;
 
 namespace YesAlready.Features;
 public class CustomAddonCallbacks : BaseFeature
@@ -33,7 +34,8 @@ public class CustomAddonCallbacks : BaseFeature
 
     protected static unsafe void AddonSetup(AddonEvent eventType, AddonArgs addonInfo)
     {
-        if (!P.Active) return;
+        // 這支是 static 的，拿不到實例 ⇒ 直接用類別簡名當鍵（BaseFeature.Key 就是 GetType().Name）。
+        if (!P.Active || BotherPauses.IsMuted(nameof(CustomAddonCallbacks))) return;
 
         if (C.CustomRootFolder.Children.OfType<CustomEntryNode>().FirstOrDefault(x => x.Addon == addonInfo.AddonName && x.Enabled) is { } node)
         {

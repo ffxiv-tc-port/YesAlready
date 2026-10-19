@@ -27,13 +27,13 @@ internal class SelectIconString : TextMatchingFeature
             if (!CheckRestrictions(node))
                 continue;
 
-            if (Service.Watcher.LastSelectedListEntry is { } last && last.TargetDataId == Svc.Targets.Target?.DataId && last.Node == node)
+            if (Service.Watcher.LastSelectedListEntry is { } last && last.TargetDataId == Svc.Targets.Target?.BaseId && last.Node == node)
                 continue;
 
             var index = GetMatchingIndex(entries, node.Text, node.IsTextRegex);
             if (index.HasValue)
             {
-                Service.Watcher.LastSelectedListEntry = new() { TargetDataId = Svc.Targets.Target?.DataId ?? 0, Node = node };
+                Service.Watcher.LastSelectedListEntry = new() { TargetDataId = Svc.Targets.Target?.BaseId ?? 0, Node = node };
                 return index.Value;
             }
         }

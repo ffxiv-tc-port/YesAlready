@@ -1,34 +1,45 @@
-<div align="center">
-
-<img src="Assets/yesalready_icon.png" alt="Yes Already IconUrl" width="15%">
-
 # Yes Already
 
-Clicks Yes in various dialogs you've specified.
+[YesAlready](https://github.com/PunishXIV/YesAlready) 的台服移植版。自動幫你點選各種確認對話框，不用每次都手動按「是」。
 
-<br />
+## 功能
 
-</div>
+- 自訂清單：依文字比對（支援 `/正規表示式/`）自動點選「是／否」確認框、選單、對話與「確定」框，可限定在指定區域
+- 內建多種原生視窗的自動處理（每種可個別開關），例如：任務準備完成確認、理符確認難度、
+  派遣委託確認與委託結果自動重新派遣、僱員物品轉移、潛水艇探索報告、
+  分解確認／結果、精選結果、精製魔晶石／鑲嵌／取出魔晶石確認、投影施加／解除、
+  特殊納品、軍隊納品確認、任務獎勵完成確認、時尚品鑑結果、陸行鳥競賽結果、
+  仙人仙彩號碼輸入、水晶衝突與前線結果、資料中心旅行確認、宇宙探索公告與獎勵視窗等
+- 「自動 GimmickYesNo」：副本機關這類固定的確認框（例如開門）一律按「是」
+- 快捷鍵：按住可暫時停用插件、或按住強制點選「是」
+- 讓其他插件（AutoDuty、AutoRetainer、Lifestream 等）在自動化期間暫時壓制本插件，或只暫停某一種視窗（IPC 與共用的停止請求清單）
 
-**As of 2023/10/03, YesAlready is now maintained by Puni.sh, support can be provided in our Discord community. Please update your repo url to the one found further below.**
+## 指令
 
-This plugin stores a list of Yes/No dialogs (among others) and clicks yes for you when they show up. Look, I already said yes once, don't ask me again. Like for all those little prompts in dungeons. Yes I really do want to teleport to the next area in Praetorium.
+- `/pyes`（或 `/yesalready`）：開啟設定視窗
+- `/pyes toggle`：開關整個插件
+- `/pyes last`：把最後看到的確認框加進清單（可加 `no`、`zone`、`zone folder`）
+- `/pyes lastlist`、`/pyes lasttalk`：把最後選過的選單項目、最後的對話對象加進清單
+- `/pyes dutyconfirm`、`/pyes onetimeconfirm`：開關任務準備完成確認的自動按
+- `/pyes help`：在聊天視窗列出全部指令
 
-Each type of dialog needs to be manually added, if you would like one that is not currently supported, please let me know.
+## 台服版的修改
 
-## In-game usage
+- 介面繁體中文化。
+- 其他插件的壓制改成記名的「壓制租約」（最長 5 分鐘、可續約）：多個插件同時要求暫停不再互相蓋掉，壓制的插件當掉或忘了放手也會自動到期。
+- 台服確認框比對：視窗標題帶遊戲文字代碼時也比得上；7.25 起地名的「·」改成「・」後，舊規則照樣比對得上。
+- 小隊邀請的比對改成整句依序比對，不再誤中新人頻道與同好會邀請。
+- 鑲嵌確認視窗只在你自己鑲嵌、而且成功率 100% 時才自動按「鑲嵌」（魔晶石鑲嵌委託與接受委託的視窗一律不按）。
+- 分解確認視窗新增子選項「持續分解到持有數量歸零」（預設關）。
+- 「自動 GimmickYesNo」補上台服幾種含道具名的機關確認。
+- 特殊納品連續交納時不再被上一次的記號擋住。
+- 不會對正在關閉的視窗再按一次（避免遊戲崩潰）；遊戲改版後有特徵碼對不上時只停用那一項並在 log 寫明。
+- 多處降低記憶體用量。
 
-- Type `/pyes` to pull up the GUI.
-- Type `/pyes help` to view additional command line arguments.
+## 安裝
 
-## Installation
+在 Dalamud 設定的「自訂插件庫」加入
+`https://raw.githubusercontent.com/ffxiv-tc-port/DalamudPluginsTC/main/repo.json` 並啟用，
+再從插件列表安裝。
 
-- Add `https://love.puni.sh/ment.json` to your list of repos in `/xlsettings`
-
-<br />
-
-<div align="center">
-
-[![image](https://discordapp.com/api/guilds/1001823907193552978/embed.png?style=banner2)](https://discord.gg/Zzrcc8kmvy)
-
-</div>
+原作者：[Puni.sh](https://puni.sh/) 社群
