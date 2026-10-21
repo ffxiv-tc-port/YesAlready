@@ -55,7 +55,7 @@ internal class SelectYesno : TextMatchingFeature
 
             var rawName = itemNameValue == null ? string.Empty : itemNameValue->String.AsDalamudSeString().GetText();
             var name = Enum.GetValues<SeIconChar>().Cast<SeIconChar>().Aggregate(rawName, (current, enumValue) => current.Replace(enumValue.ToIconString(), "")).Trim();
-            if (GenericHelpers.FindRow<Item>(x => x.IsCollectable && !x.Singular.IsEmpty && name.Contains(x.Singular.GetText(), StringComparison.InvariantCultureIgnoreCase)) is { RowId: > 0 } item)
+            if (collectableNames.Value.Match(name) is { } matchedRow && GenericHelpers.GetRow<Item>(matchedRow) is { RowId: > 0 } item)
             {
                 Log($"Detected item [{item}] {item.Name}");
                 if (int.TryParse(Regex.Match(text, @"\d+").Value, out var value))
@@ -222,6 +222,12 @@ internal class SelectYesno : TextMatchingFeature
         "Sammlerwert",
         "Valeur de collection"
     ];
+
+    /// <summary>第一次遇到收藏品確認框才讀整張 Item 表；表在執行期間不會變。</summary>
+    private static readonly Lazy<CollectableNameMatcher> collectableNames =
+        new(() => new CollectableNameMatcher(Svc.Data.GetExcelSheet<Item>()
+            .Where(x => x.IsCollectable && !x.Singular.IsEmpty)
+            .Select(x => (x.RowId, x.Singular.GetText(), x.Name.GetText()))));
 
     /// <summary>第一次用到才讀表（含整張 EventItem）；表在執行期間不會變。</summary>
     private static readonly Lazy<GimmickPromptMatcher> gimmickFallback =
