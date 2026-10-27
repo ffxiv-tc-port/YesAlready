@@ -122,6 +122,8 @@ internal class SelectYesno : TextMatchingFeature
     protected override unsafe void Proceed(AtkUnitBase* atk, object? matchingNode)
     {
         if (matchingNode is not TextEntryNode node) return;
+        // 只登記不判斷：這條路徑照舊按；登記是為了讓交易自動確認不對同一扇正在關閉的確認框再按一次。
+        AddonPressGuard.NotePress("SelectYesno", atk);
         if (node.IsYes)
             new AddonMaster.SelectYesno(atk).Yes();
         else

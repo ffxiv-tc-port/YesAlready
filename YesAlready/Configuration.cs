@@ -100,6 +100,15 @@ public partial class Configuration() : IPluginConfiguration
 
     public List<CustomBother> CustomCallbacks { get; set; } = [];
 
+    /// <summary>玩家交易：對方確認後我方自動確認。開著就寫狀態轉換診斷；真的按還要 <see cref="TradeAutoConfirmPress"/>。</summary>
+    public bool TradeAutoConfirm { get; set; } = false;
+
+    /// <summary>條件成立時真的按「確定」；關著＝只寫「本來會按」的紀錄。</summary>
+    public bool TradeAutoConfirmPress { get; set; } = false;
+
+    public bool TradeWhitelistEnabled { get; set; } = false;
+    public List<TradePartnerEntry> TradeWhitelist { get; set; } = [];
+
     public class CustomBother
     {
         public string Name { get; set; } = string.Empty;

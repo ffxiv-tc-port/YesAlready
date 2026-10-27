@@ -496,6 +496,13 @@ public static class Bothers
 
         #endregion
 
+        #region Player Trade
+
+        if (ImGui.CollapsingHeader("Player Trade".Loc()))
+            DrawPlayerTrade();
+
+        #endregion
+
         #region Forays
         if (ImGui.CollapsingHeader("Forays".Loc()))
         {
@@ -537,5 +544,83 @@ public static class Bothers
             ImGuiX.IndentedTextColored("Automatically close the Cosmic Exploration rewards window.".Loc());
         }
         #endregion
+    }
+
+    /// <summary>「限時自動確認」輸入框的分鐘數：只是 UI 暫存，不存檔。</summary>
+    private static int tradeTimedMinutes = TradeConfirmRules.DefaultTimedMinutes;
+
+    private static void DrawPlayerTrade()
+    {
+        var enabled = C.TradeAutoConfirm;
+        if (ImGui.Checkbox("Auto-confirm after the trade partner confirms".Loc(), ref enabled))
+        {
+            C.TradeAutoConfirm = enabled;
+            C.Save();
+        }
+        ImGuiX.IndentedTextColored("When both sides have locked in and the other player has already confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).".Loc());
+        if (!C.TradeAutoConfirm) return;
+
+        using var indent = ImRaii.PushIndent();
+
+        var press = C.TradeAutoConfirmPress;
+        if (ImGui.Checkbox("Actually press".Loc(), ref press))
+        {
+            C.TradeAutoConfirmPress = press;
+            C.Save();
+        }
+        ImGuiX.IndentedTextColored("Off = log mode: nothing is pressed, the log only says it would have. Trade once with an alt first and check in the log that the partner's confirmed state (other=6) shows up before you press, then turn this on.".Loc());
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Timed auto-confirm".Loc());
+        ImGui.SameLine();
+        var remaining = Features.TradeAutoConfirm.TimedRemainingMs;
+        if (remaining > 0)
+            ImGui.TextUnformatted("Running: ?? min left".Loc(TradeConfirmRules.MinutesCeil(remaining)));
+        else
+            ImGui.TextDisabled("Not running".Loc());
+        ImGui.SetNextItemWidth(100);
+        if (ImGui.InputInt("Minutes".Loc() + "##TradeTimedMinutes", ref tradeTimedMinutes))
+            tradeTimedMinutes = TradeConfirmRules.ClampMinutes(tradeTimedMinutes);
+        ImGui.SameLine();
+        if (ImGui.Button("Start".Loc() + "##TradeTimedStart"))
+            Features.TradeAutoConfirm.StartTimed(tradeTimedMinutes);
+        if (remaining > 0)
+        {
+            ImGui.SameLine();
+            if (ImGui.Button("Stop".Loc() + "##TradeTimedStop"))
+                Features.TradeAutoConfirm.StopTimed("設定頁關閉");
+        }
+        ImGuiX.IndentedTextColored("Any partner is accepted while it runs. Never saved: reloading the plugin, logging in or logging out always turns it off.".Loc());
+
+        ImGui.Spacing();
+        var whitelist = C.TradeWhitelistEnabled;
+        if (ImGui.Checkbox("Trade partner whitelist".Loc(), ref whitelist))
+        {
+            C.TradeWhitelistEnabled = whitelist;
+            C.Save();
+        }
+        ImGuiX.IndentedTextColored("Only partners on this list (name + home world) are auto-confirmed. If the partner cannot be verified, nothing is pressed.".Loc());
+        if (ImGui.Button("Add current trade partner / targeted player".Loc() + "##TradeWhitelistAdd"))
+            Features.TradeAutoConfirm.AddCandidate();
+
+        var removeAt = -1;
+        if (C.TradeWhitelist.Count == 0)
+            ImGui.TextDisabled("No entries.".Loc());
+        for (var i = 0; i < C.TradeWhitelist.Count; i++)
+        {
+            var entry = C.TradeWhitelist[i];
+            if (ImGui.SmallButton("Remove".Loc() + $"##TradeWhitelist{i}"))
+                removeAt = i;
+            ImGui.SameLine();
+            ImGui.TextUnformatted(entry == null ? "?" : $"{entry.Name} @ {Features.TradeAutoConfirm.WorldName(entry.HomeWorld)}");
+        }
+        if (removeAt >= 0)
+        {
+            C.TradeWhitelist.RemoveAt(removeAt);
+            C.Save();
+        }
+
+        ImGui.Spacing();
+        ImGuiX.IndentedTextColored("Your existing Yes/No rules (such as a zone rule for the trade confirmation) keep working as before. Materia and high-quality item warnings are never pressed. Yields while AutoRetainer or Lifestream is busy. Do not use together with Splatoon's DenyAllTrades script.".Loc());
     }
 }

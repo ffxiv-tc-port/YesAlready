@@ -194,6 +194,35 @@ internal static unsafe class AddonPressGuard
     public static bool TryBeginRoutinePress(string? addonName, AtkUnitBase* addon, string? paramKey = null)
         => TryBeginPressCore(addonName, addon, paramKey, routine: true);
 
+    /// <summary>
+    /// 記下「不經守衛的既有路徑已經對這扇按下即關的窗按了終結按法」：只登記、不判斷、不改呼叫端行為，
+    /// 讓之後別的路徑對同一實例的 <see cref="TryBeginPress"/> 擋得住。表滿就不記（只會少擋，不會多擋）。
+    /// </summary>
+    public static void NotePress(string? addonName, AtkUnitBase* addon)
+    {
+        EnsureWatching();
+        if (addon == null || string.IsNullOrEmpty(addonName)) return;
+
+        var address = (nint)addon;
+        GuardedNames.Add(addonName);
+        if (!Pressed.TryGetValue(address, out var records))
+        {
+            if (!MakeRoom()) return;
+            records = new AddressRecords(addonName);
+            Pressed[address] = records;
+        }
+
+        if (!records.Listed && LookUp(addonName, address, readVisibility: false) == AddonPresence.Visible)
+        {
+            records.AddonName = addonName;
+            records.Listed = true;
+        }
+
+        records.ByParam[string.Empty] = new PressRecord(frameCount, false);
+        records.LastFrame = frameCount;
+        records.HiddenFrames = 0;
+    }
+
     private static bool TryBeginPressCore(string? addonName, AtkUnitBase* addon, string? paramKey, bool routine)
     {
         // 🔴 這一行要在所有 early return 之前：沒有掛上時鐘的話逃生口永遠不會到期。

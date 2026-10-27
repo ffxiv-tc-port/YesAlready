@@ -155,21 +155,24 @@ public class YesAlready : IDalamudPlugin
         SeString? steadyText = null;
         (bool Enabled, string Status, string Left, string Right) steadyKey = default;
         SeString? pausedText = null;
-        (bool Enabled, bool Suppressed) pausedKey = default;
+        (bool Enabled, bool Suppressed, bool TradeTimed) pausedKey = default;
         long pausedRefreshAt = 0;
         yesAlreadyDtr = new EzDtr(() =>
         {
             var suppressed = Suppressed;
             var paused = suppressed || BotherPauses.Any;
+            // 限時交易自動確認開著時，列上要看得到剩餘分鐘；和暫停一樣走定期重建。
+            var tradeMs = Features.TradeAutoConfirm.TimedRemainingMs;
+            var periodic = paused || tradeMs > 0;
             (bool Enabled, string Status, string Left, string Right) key = default;
-            if (!paused)
+            if (!periodic)
             {
                 pausedText = null;
                 key = (C.Enabled, C.Enabled ? "On".Loc() : "Off".Loc(), "Left click: toggle on/off".Loc(), "Right click: open/close settings".Loc());
                 if (steadyText != null && key == steadyKey)
                     return steadyText;
             }
-            else if (pausedText != null && pausedKey == (C.Enabled, suppressed) && Environment.TickCount64 < pausedRefreshAt)
+            else if (pausedText != null && pausedKey == (C.Enabled, suppressed, tradeMs > 0) && Environment.TickCount64 < pausedRefreshAt)
                 return pausedText;
 
             // 「被誰壓著、還剩多久」放 tooltip：它是「起疑才查」的資訊；而「有沒有被壓著」本身
@@ -178,17 +181,20 @@ public class YesAlready : IDalamudPlugin
             yesAlreadyDtr.Entry!.Tooltip = new SeString(new TextPayload(
                 $"{Name}: {(C.Enabled ? (suppressed ? "Paused".Loc() : "On".Loc()) : "Off".Loc())}"
                 + (suppressionDetails.Length == 0 ? "" : "\n" + "Paused by: ??".Loc("\n  " + string.Join("\n  ", suppressionDetails)))
+                + (tradeMs > 0 ? "\n" + "Trade auto-confirm: ?? min left".Loc(TradeConfirmRules.MinutesCeil(tradeMs)) : "")
                 + "\n" + "Left click: toggle on/off".Loc()
                 + "\n" + "Right click: open/close settings".Loc()));
             var text = new SeString(
                 new TextPayload(SeIconChar.ArrowRight.ToIconString()),
                 new IconPayload(C.Enabled && !suppressed ? BitmapFontIcon.GreenDot : BitmapFontIcon.NoCircle));
-            steadyText = paused ? null : text;
+            if (tradeMs > 0)
+                text.Append(new TextPayload(" " + "Trade ?? min".Loc(TradeConfirmRules.MinutesCeil(tradeMs))));
+            steadyText = periodic ? null : text;
             steadyKey = key;
-            if (paused)
+            if (periodic)
             {
                 pausedText = text;
-                pausedKey = (C.Enabled, suppressed);
+                pausedKey = (C.Enabled, suppressed, tradeMs > 0);
                 pausedRefreshAt = Environment.TickCount64 + PausedRefreshMs;
             }
             return text;
@@ -328,6 +334,12 @@ public class YesAlready : IDalamudPlugin
             return;
         }
 
+        if (arguments.StartsWith("trade", StringComparison.OrdinalIgnoreCase) && (arguments.Length == 5 || arguments[5] == ' '))
+        {
+            Features.TradeAutoConfirm.HandleCommand(arguments[5..]);
+            return;
+        }
+
         switch (arguments)
         {
             case "help":
@@ -392,6 +404,7 @@ public class YesAlready : IDalamudPlugin
         sb.AppendLine($"{Command} lasttalk - " + "Add the last seen target during a Talk dialog.".Loc());
         sb.AppendLine($"{Command} dutyconfirm - " + "Toggle duty confirm.".Loc());
         sb.AppendLine($"{Command} onetimeconfirm - " + "Toggles duty confirm as well as one-time confirm.".Loc());
+        sb.AppendLine(Features.TradeAutoConfirm.HelpText());
         Svc.Chat.PrintPluginMessage(sb);
     }
 
