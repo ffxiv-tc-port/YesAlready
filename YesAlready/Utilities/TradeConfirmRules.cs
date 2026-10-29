@@ -27,7 +27,39 @@ internal enum TradeConfirmVerdict
     WouldPress = 3,
 
     Press = 4,
+
+    /// <summary>提出條件：對方提出條件後交易內容又變了，這次交給玩家自己按。</summary>
+    ContentChanged = 5,
+
+    /// <summary>提出條件：按鈕不在、停用、看不見，或文字不是「提出條件」。</summary>
+    ButtonNotReady = 6,
+
+    /// <summary>提出條件：玩家正在操作（數量輸入、右鍵選單、確認框開著）。</summary>
+    UserBusy = 7,
+
+    /// <summary>提出條件：對方提出條件、或交易內容最後一次變動，到現在還不滿 <see cref="TradeConfirmRules.OfferSettleMs"/>。</summary>
+    Settling = 8,
 }
+
+/// <summary>第一段（交易視窗「提出條件」鈕）的判定輸入。</summary>
+/// <param name="ContentChangedSinceRemoteOffer">對方提出條件之後，雙方任一邊的交易內容變過。</param>
+/// <param name="StableMs">從「對方提出條件」與「交易內容最後一次變動」兩者較晚的那一刻起算的毫秒。</param>
+/// <param name="AlreadyPressed">這次交易已經自動按過一次。</param>
+internal readonly record struct TradeOfferInputs(
+    int LocalState,
+    int RemoteState,
+    bool TradeWindowReady,
+    bool AlreadyPressed,
+    bool ContentChangedSinceRemoteOffer,
+    bool OfferButtonReady,
+    bool UserBusy,
+    long StableMs,
+    bool TimedActive,
+    bool PartnerWhitelisted,
+    bool PluginActive,
+    bool Muted,
+    bool OtherPluginBusy,
+    bool PressEnabled);
 
 internal readonly record struct TradeConfirmInputs(
     int LocalState,
@@ -59,8 +91,83 @@ internal static class TradeConfirmRules
     /// <summary>CS <c>TradeState.Confirmed</c>。</summary>
     public const int StateConfirmed = 6;
 
+    /// <summary>CS <c>TradeState.SelectingTradeGoods</c>：還在挑物品、還沒按「提出條件」。</summary>
+    public const int StateSelectingTradeGoods = 3;
+
+    /// <summary>CS <c>TradeState.LockedIn</c>：按了「提出條件」、等另一方。</summary>
+    public const int StateLockedIn = 4;
+
+    /// <summary>第一段按之前，對方提出條件與交易內容都要維持不變這麼久。</summary>
+    public const long OfferSettleMs = 1000;
+
     public const int DefaultTimedMinutes = 5;
     public const int MaxTimedMinutes = 60;
+
+    /// <summary>
+    /// 第一段判定順序：就緒 → 授權 → 內容變動 → 按鈕 → 玩家操作中 → 穩定時間 → 讓步 → 紀錄模式；任何一關不過都不按。
+    /// </summary>
+    public static TradeConfirmVerdict DecideOffer(in TradeOfferInputs i)
+    {
+        if (i.LocalState != StateSelectingTradeGoods || i.RemoteState != StateLockedIn
+            || !i.TradeWindowReady || i.AlreadyPressed)
+            return TradeConfirmVerdict.NotReady;
+        if (!i.TimedActive && !i.PartnerWhitelisted)
+            return TradeConfirmVerdict.NotAuthorized;
+        if (i.ContentChangedSinceRemoteOffer)
+            return TradeConfirmVerdict.ContentChanged;
+        if (!i.OfferButtonReady)
+            return TradeConfirmVerdict.ButtonNotReady;
+        if (i.UserBusy)
+            return TradeConfirmVerdict.UserBusy;
+        if (i.StableMs < OfferSettleMs)
+            return TradeConfirmVerdict.Settling;
+        if (!i.PluginActive || i.Muted || i.OtherPluginBusy)
+            return TradeConfirmVerdict.Yielding;
+        return i.PressEnabled ? TradeConfirmVerdict.Press : TradeConfirmVerdict.WouldPress;
+    }
+
+    /// <summary>
+    /// 對方提出條件那一段的追蹤：<paramref name="since"/> 為 0＝不在這一段；進入時記下內容指紋，
+    /// 之後指紋一變就把 <paramref name="changed"/> 設起來，直到離開這一段才清。
+    /// </summary>
+    public static void TrackRemoteOffer(bool inOffer, ulong content, long now, ref long since, ref ulong snapshot, ref bool changed)
+    {
+        if (!inOffer)
+        {
+            since = 0;
+            changed = false;
+            return;
+        }
+
+        if (since == 0)
+        {
+            since = now;
+            snapshot = content;
+            changed = false;
+        }
+        else if (content != snapshot)
+        {
+            changed = true;
+        }
+    }
+
+    /// <summary>不在對方提出條件那一段回 0；否則從那一段開始與最後一次內容變動兩者較晚者起算。</summary>
+    public static long StableMs(long remoteOfferSince, long lastContentChangeAt, long now)
+        => remoteOfferSince == 0 ? 0 : now - Math.Max(remoteOfferSince, lastContentChangeAt);
+
+    /// <summary>交易一格的內容指紋（道具、數量、旗標），12 格依序疊進同一個值。</summary>
+    public static ulong MixContent(ulong acc, uint itemId, int quantity, uint flags)
+    {
+        unchecked
+        {
+            acc = (acc ^ itemId) * 0x100000001B3UL;
+            acc = (acc ^ (uint)quantity) * 0x100000001B3UL;
+            acc = (acc ^ flags) * 0x100000001B3UL;
+            return acc;
+        }
+    }
+
+    public const ulong ContentSeed = 0xCBF29CE484222325UL;
 
     /// <summary>判定順序：就緒 → 授權 → 讓步 → 紀錄模式；任何一關不過都不按。</summary>
     public static TradeConfirmVerdict Decide(in TradeConfirmInputs i)

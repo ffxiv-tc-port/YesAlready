@@ -223,6 +223,23 @@ internal static unsafe class AddonPressGuard
         records.HiddenFrames = 0;
     }
 
+    /// <summary>
+    /// 先把窗名列進守護名單：之後這個名字的任何實例一進 <see cref="AddonEvent.PreFinalize"/> 就上鎖，
+    /// 即使本外掛還沒按過它（例如別的外掛先送了關窗的 callback）。
+    /// </summary>
+    public static void WatchName(string? addonName)
+    {
+        EnsureWatching();
+        if (!string.IsNullOrEmpty(addonName)) GuardedNames.Add(addonName);
+    }
+
+    /// <summary>這個實例已經有人登記按過終結按法、或已上鎖（正在拆除）；只查不登記。</summary>
+    public static bool IsAnsweredOrFinalizing(AtkUnitBase* addon)
+    {
+        if (addon == null || !Pressed.TryGetValue((nint)addon, out var records)) return false;
+        return records.Finalizing || records.ByParam.ContainsKey(string.Empty);
+    }
+
     private static bool TryBeginPressCore(string? addonName, AtkUnitBase* addon, string? paramKey, bool routine)
     {
         // 🔴 這一行要在所有 early return 之前：沒有掛上時鐘的話逃生口永遠不會到期。

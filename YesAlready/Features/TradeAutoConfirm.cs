@@ -1,4 +1,5 @@
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Memory;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
 using ECommons.LanguageHelpers;
@@ -10,11 +11,12 @@ using YesAlready.IPC;
 
 namespace YesAlready.Features;
 
-/// <summary>玩家交易：雙方都鎖定、對方已確認時，替我方按交易確認框的「確定」。</summary>
+/// <summary>玩家交易：對方按了「提出條件」就替我方按「提出條件」（第一段）；對方已確認時替我方按交易確認框的「確定」（第二段）。</summary>
 /// <remarks>
-/// 契約：每幀照名字重找確認框與交易視窗，位址只做等值比較、不跨幀存指標；只有「本機 5＋對方 6」那一幀才可能按，
-/// 且要「限時有效」或「白名單開且對方在名單」，按前走 <see cref="AddonPressGuard"/>。
-/// 刻意不掛 PostSetup：對方確認可能在確認框開出來之後才到，只能每幀輪詢。
+/// 契約：每幀照名字重找確認框與交易視窗，位址只做等值比較、不跨幀存指標；兩段都要「限時有效」或「白名單開且對方在名單」。
+/// 第一段只在「本機 3＋對方 4」、對方提出條件後雙方內容沒變、內容穩定滿 <see cref="TradeConfirmRules.OfferSettleMs"/>、
+/// 按鈕文字是 Addon#203 時按，每次交易最多一次；第二段只在「本機 5＋對方 6」那一幀按。按前都走 <see cref="AddonPressGuard"/>。
+/// 刻意不掛 PostSetup：對方的動作可能在視窗開出來之後才到，只能每幀輪詢。
 /// 限時期限只放記憶體、不存檔：載入／登入不可能自動開。
 /// </remarks>
 internal unsafe class TradeAutoConfirm : BaseFeature
@@ -22,14 +24,26 @@ internal unsafe class TradeAutoConfirm : BaseFeature
     private const string AddonSelectYesno = "SelectYesno";
     private const string AddonTrade = "Trade";
     private const uint TradeConfirmAddonRow = 102223;
+
+    /// <summary>Trade.uld 的「提出條件」鈕（TextId 203）；按下送 callback 值 0（台服 7.25 執行檔離線反組譯確認）。</summary>
+    private const uint OfferButtonNodeId = 33;
+    private const uint OfferLabelAddonRow = 203;
+    private const int OfferCallbackValue = 0;
+
+    /// <summary>這些窗開著＝玩家正在操作交易（輸入數量／Gil、右鍵選單、魔晶石或優質確認），第一段先不按。</summary>
+    private static readonly string[] UserBusyAddons = ["InputNumeric", "ContextMenu", AddonSelectYesno];
+
     private const string Tag = "[TradeAutoConfirm]";
 
     private enum DialogState { None, NotReady, TradeConfirm, Other }
     private enum WindowState { None, NotReady, Ready }
+    private enum ButtonState { Unknown, Missing, Disabled, Hidden, WrongLabel, Ready }
 
     private static long timedDeadline;
     private static string? templateText;
     private static bool templateLoaded;
+    private static string? offerLabelText;
+    private static bool offerLabelLoaded;
     private static ICallGateSubscriber<bool>? autoRetainerBusy;
     private static ICallGateSubscriber<bool>? lifestreamBusy;
 
@@ -37,12 +51,21 @@ internal unsafe class TradeAutoConfirm : BaseFeature
     private bool faultLogged;
     private bool tracking;
     private long tradeStartedAt;
-    private (int Local, int Remote, DialogState Dialog, WindowState Window) lastSnapshot;
-    private string? lastDecision;
+    private (int Local, int Remote, DialogState Dialog, WindowState Window, ButtonState Button) lastSnapshot;
+    private string? lastOfferDecision;
+    private string? lastConfirmDecision;
+
+    private bool offerPressed;
+    private ulong lastContent;
+    private long lastContentChangeAt;
+    private long remoteOfferSince;
+    private ulong remoteOfferContent;
+    private bool remoteOfferContentChanged;
 
     public override void Enable()
     {
         base.Enable();
+        AddonPressGuard.WatchName(AddonTrade);
         if (subscribed) return;
         Svc.Framework.Update += OnUpdate;
         subscribed = true;
@@ -124,69 +147,188 @@ internal unsafe class TradeAutoConfirm : BaseFeature
             return;
         }
 
+        var content = ReadContent(im, out var localSlots, out var remoteSlots);
         if (!tracking)
         {
             tracking = true;
             tradeStartedAt = now;
-            lastSnapshot = (-1, -1, DialogState.None, WindowState.None);
-            lastDecision = null;
+            lastSnapshot = (-1, -1, DialogState.None, WindowState.None, ButtonState.Unknown);
+            lastOfferDecision = null;
+            lastConfirmDecision = null;
+            offerPressed = false;
+            lastContent = content;
+            lastContentChangeAt = now;
+            remoteOfferSince = 0;
+            remoteOfferContentChanged = false;
         }
 
+        if (content != lastContent)
+        {
+            lastContent = content;
+            lastContentChangeAt = now;
+        }
+        var inRemoteOffer = local == TradeConfirmRules.StateSelectingTradeGoods && remote == TradeConfirmRules.StateLockedIn;
+        TradeConfirmRules.TrackRemoteOffer(inRemoteOffer, content, now, ref remoteOfferSince, ref remoteOfferContent, ref remoteOfferContentChanged);
+
         var dialog = ReadDialog(out var yesno, out var dialogText);
-        var window = ReadTradeWindow();
-        var snapshot = (local, remote, dialog, window);
+        var trade = ReadTradeWindow(out var window);
+        // 按鈕文字每讀一次就配置一次字串：只在第一段可能動作的那段時間讀。
+        var button = inRemoteOffer && window == WindowState.Ready ? ReadOfferButton(trade) : ButtonState.Unknown;
+        // 物品格數只隨狀態行附帶、不當作「變了」的依據：交易欄位偏移沒有實機證實，讀錯時不能變成每幀一行。
+        var snapshot = (local, remote, dialog, window, button);
         if (snapshot != lastSnapshot)
         {
             lastSnapshot = snapshot;
-            PluginLog.Information($"{Tag} 狀態 本機={local} 對方={remote} 確認框={DescribeDialog(dialog, dialogText)} 交易視窗={DescribeWindow(window)} 經過={now - tradeStartedAt}ms");
+            PluginLog.Information($"{Tag} 狀態 本機={local} 對方={remote} 確認框={DescribeDialog(dialog, dialogText)} 交易視窗={DescribeWindow(window)} " +
+                                  $"提出條件鈕={DescribeButton(button)} 物品格 我方={localSlots} 對方={remoteSlots} 經過={now - tradeStartedAt}ms");
         }
 
+        TryOffer(im, trade, window, button, local, remote, now);
+        TryConfirm(im, yesno, dialog, window, local, remote, now);
+    }
+
+    /// <summary>第一段：對方按了「提出條件」，替我方按「提出條件」。</summary>
+    private void TryOffer(InventoryManager* im, AtkUnitBase* trade, WindowState window, ButtonState button, int local, int remote, long now)
+    {
+        var inputs = new TradeOfferInputs(local, remote, window == WindowState.Ready, offerPressed, remoteOfferContentChanged,
+            button == ButtonState.Ready, false, TradeConfirmRules.StableMs(remoteOfferSince, lastContentChangeAt, now),
+            false, false, false, false, false, false);
+        if (TradeConfirmRules.DecideOffer(inputs) == TradeConfirmVerdict.NotReady)
+        {
+            lastOfferDecision = null;
+            return;
+        }
+
+        var auth = Authorize(im, now, out var basis, out var partnerDetail);
+        string? busyDetail = null;
+        var busy = (auth.Timed || auth.Whitelisted) && OtherPluginBusy(out busyDetail);
+        inputs = inputs with
+        {
+            TimedActive = auth.Timed,
+            PartnerWhitelisted = auth.Whitelisted,
+            UserBusy = UserIsBusy(out var busyAddon),
+            PluginActive = P.Active,
+            Muted = BotherPauses.IsMuted(Key),
+            OtherPluginBusy = busy,
+            PressEnabled = C.TradeAutoConfirmPress,
+        };
+        var verdict = TradeConfirmRules.DecideOffer(inputs);
+
+        var decision = verdict switch
+        {
+            TradeConfirmVerdict.ContentChanged => "不按：對方提出條件後交易內容又變了，這次請自己按",
+            TradeConfirmVerdict.ButtonNotReady => $"不按：「提出條件」鈕{DescribeButton(button)}",
+            TradeConfirmVerdict.UserBusy => $"等待：你正在操作（{busyAddon} 開著）",
+            TradeConfirmVerdict.Settling => $"等待：對方提出條件與交易內容要維持 {TradeConfirmRules.OfferSettleMs}ms 不變",
+            _ => DescribeCommon(verdict, basis, partnerDetail, inputs.PluginActive, inputs.Muted, busyDetail),
+        };
+        if (!string.Equals(decision, lastOfferDecision, StringComparison.Ordinal))
+        {
+            lastOfferDecision = decision;
+            PluginLog.Information($"{Tag} 判定（提出條件） {decision} 經過={now - tradeStartedAt}ms");
+        }
+
+        if (verdict != TradeConfirmVerdict.Press) return;
+        if (!AddonPressGuard.TryBeginPress(AddonTrade, trade, OfferCallbackValue.ToString())) return;
+        offerPressed = true;
+        Callback.Fire(trade, true, OfferCallbackValue);
+        PluginLog.Information($"{Tag} 已按「提出條件」 本機={local} 對方={remote} 依據={basis} 經過={now - tradeStartedAt}ms");
+    }
+
+    /// <summary>第二段：雙方都提出條件、對方已確認，替我方在確認框按「確定」。</summary>
+    private void TryConfirm(InventoryManager* im, AtkUnitBase* yesno, DialogState dialog, WindowState window, int local, int remote, long now)
+    {
         var inputs = new TradeConfirmInputs(local, remote, dialog == DialogState.TradeConfirm, window == WindowState.Ready,
             false, false, false, false, false, false);
         if (TradeConfirmRules.Decide(inputs) == TradeConfirmVerdict.NotReady)
         {
-            lastDecision = null;
+            lastConfirmDecision = null;
             return;
         }
 
-        var timed = TradeConfirmRules.TimedActive(timedDeadline, now);
-        string? partnerDetail = null;
-        var whitelisted = !timed && C.TradeWhitelistEnabled
-            && TradeConfirmRules.IsWhitelisted(C.TradeWhitelist, ResolvePartner(im, out partnerDetail));
+        var auth = Authorize(im, now, out var basis, out var partnerDetail);
         string? busyDetail = null;
-        var busy = (timed || whitelisted) && OtherPluginBusy(out busyDetail);
+        var busy = (auth.Timed || auth.Whitelisted) && OtherPluginBusy(out busyDetail);
         inputs = inputs with
         {
-            TimedActive = timed,
-            PartnerWhitelisted = whitelisted,
+            TimedActive = auth.Timed,
+            PartnerWhitelisted = auth.Whitelisted,
             PluginActive = P.Active,
             Muted = BotherPauses.IsMuted(Key) || BotherPauses.IsMuted(AddonSelectYesno),
             OtherPluginBusy = busy,
             PressEnabled = C.TradeAutoConfirmPress,
         };
         var verdict = TradeConfirmRules.Decide(inputs);
-        var basis = timed ? "限時" : "白名單";
+        // 使用者自己的是/否規則先按了同一扇確認框：不是錯誤，照實寫一行就好，不再送。
+        var answered = (verdict is TradeConfirmVerdict.Press or TradeConfirmVerdict.WouldPress) && AddonPressGuard.IsAnsweredOrFinalizing(yesno);
 
-        var decision = verdict switch
+        var decision = answered
+            ? "不按：確認框已由其他規則按過"
+            : DescribeCommon(verdict, basis, partnerDetail, inputs.PluginActive, inputs.Muted, busyDetail);
+        if (!string.Equals(decision, lastConfirmDecision, StringComparison.Ordinal))
         {
-            TradeConfirmVerdict.NotAuthorized => C.TradeWhitelistEnabled
-                ? $"不按：限時未開，白名單沒中（{partnerDetail}）"
-                : "不按：限時未開，白名單未開",
-            TradeConfirmVerdict.Yielding => $"不按：讓步（插件啟用={inputs.PluginActive} 單項暫停={inputs.Muted} {busyDetail ?? "其他插件不忙"}）",
-            TradeConfirmVerdict.WouldPress => $"本來會按（依據={basis}），但「實際自動按」關著（紀錄模式）",
-            TradeConfirmVerdict.Press => $"按（依據={basis}）",
-            _ => verdict.ToString(),
-        };
-        if (!string.Equals(decision, lastDecision, StringComparison.Ordinal))
-        {
-            lastDecision = decision;
+            lastConfirmDecision = decision;
             PluginLog.Information($"{Tag} 判定 {decision} 經過={now - tradeStartedAt}ms");
         }
 
-        if (verdict != TradeConfirmVerdict.Press) return;
+        if (answered || verdict != TradeConfirmVerdict.Press) return;
         if (!AddonPressGuard.TryBeginPress(AddonSelectYesno, yesno)) return;
         new AddonMaster.SelectYesno(yesno).Yes();
         PluginLog.Information($"{Tag} 已按「確定」 本機={local} 對方={remote} 依據={basis} 經過={now - tradeStartedAt}ms");
+    }
+
+    private static (bool Timed, bool Whitelisted) Authorize(InventoryManager* im, long now, out string basis, out string? partnerDetail)
+    {
+        partnerDetail = null;
+        var timed = TradeConfirmRules.TimedActive(timedDeadline, now);
+        var whitelisted = !timed && C.TradeWhitelistEnabled
+            && TradeConfirmRules.IsWhitelisted(C.TradeWhitelist, ResolvePartner(im, out partnerDetail));
+        basis = timed ? "限時" : "白名單";
+        return (timed, whitelisted);
+    }
+
+    private static string DescribeCommon(TradeConfirmVerdict verdict, string basis, string? partnerDetail, bool pluginActive, bool muted, string? busyDetail) => verdict switch
+    {
+        TradeConfirmVerdict.NotAuthorized => C.TradeWhitelistEnabled
+            ? $"不按：限時未開，白名單沒中（{partnerDetail}）"
+            : "不按：限時未開，白名單未開",
+        TradeConfirmVerdict.Yielding => $"不按：讓步（插件啟用={pluginActive} 單項暫停={muted} {busyDetail ?? "其他插件不忙"}）",
+        TradeConfirmVerdict.WouldPress => $"本來會按（依據={basis}），但「實際自動按」關著（紀錄模式）",
+        TradeConfirmVerdict.Press => $"按（依據={basis}）",
+        _ => verdict.ToString(),
+    };
+
+    /// <summary>雙方交易欄 12 格的內容指紋，順便數有東西的格數（Gil 那格有金額也算一格）。</summary>
+    private static ulong ReadContent(InventoryManager* im, out int localSlots, out int remoteSlots)
+    {
+        localSlots = remoteSlots = 0;
+        var acc = TradeConfirmRules.ContentSeed;
+        if (im == null) return acc;
+        foreach (ref readonly var item in im->TradeItemsLocal)
+        {
+            acc = TradeConfirmRules.MixContent(acc, item.ItemId, item.Quantity, (uint)item.Flags);
+            if (item.ItemId != 0) localSlots++;
+        }
+        foreach (ref readonly var item in im->TradeItemsRemote)
+        {
+            acc = TradeConfirmRules.MixContent(acc, item.ItemId, item.Quantity, (uint)item.Flags);
+            if (item.ItemId != 0) remoteSlots++;
+        }
+        return acc;
+    }
+
+    private static bool UserIsBusy(out string? addonName)
+    {
+        foreach (var name in UserBusyAddons)
+        {
+            if (GenericHelpers.TryGetAddonByName<AtkUnitBase>(name, out var addon) && addon != null && addon->IsVisible)
+            {
+                addonName = name;
+                return true;
+            }
+        }
+        addonName = null;
+        return false;
     }
 
     private static DialogState ReadDialog(out AtkUnitBase* yesno, out string? text)
@@ -203,10 +345,31 @@ internal unsafe class TradeAutoConfirm : BaseFeature
         return TradeConfirmRules.IsTradeConfirmText(text, TemplateText) ? DialogState.TradeConfirm : DialogState.Other;
     }
 
-    private static WindowState ReadTradeWindow()
+    /// <summary>這一幀的交易視窗；回傳的指標只在這一幀用。</summary>
+    private static AtkUnitBase* ReadTradeWindow(out WindowState state)
     {
-        if (!GenericHelpers.TryGetAddonByName<AtkUnitBase>(AddonTrade, out var trade) || trade == null) return WindowState.None;
-        return GenericHelpers.IsAddonReady(trade) ? WindowState.Ready : WindowState.NotReady;
+        if (!GenericHelpers.TryGetAddonByName<AtkUnitBase>(AddonTrade, out var trade) || trade == null)
+        {
+            state = WindowState.None;
+            return null;
+        }
+        state = GenericHelpers.IsAddonReady(trade) ? WindowState.Ready : WindowState.NotReady;
+        return trade;
+    }
+
+    /// <summary>「提出條件」鈕：要找得到、啟用、看得見，而且按鈕文字與 Addon#203 逐字相同。</summary>
+    private static ButtonState ReadOfferButton(AtkUnitBase* trade)
+    {
+        if (trade == null) return ButtonState.Missing;
+        var button = trade->GetComponentButtonById(OfferButtonNodeId);
+        if (button == null) return ButtonState.Missing;
+        if (!GenericHelpers.IsComponentEnabled(button)) return ButtonState.Disabled;
+        if (!GenericHelpers.IsComponentVisible(&button->AtkComponentBase)) return ButtonState.Hidden;
+        var label = OfferLabelText;
+        var textNode = button->ButtonTextNode;
+        if (string.IsNullOrEmpty(label) || textNode == null) return ButtonState.WrongLabel;
+        var text = MemoryHelper.ReadSeString(&textNode->NodeText).TextValue.Trim();
+        return string.Equals(text, label, StringComparison.Ordinal) ? ButtonState.Ready : ButtonState.WrongLabel;
     }
 
     private static string DescribeDialog(DialogState state, string? text) => state switch
@@ -224,6 +387,16 @@ internal unsafe class TradeAutoConfirm : BaseFeature
         _ => "就緒",
     };
 
+    private static string DescribeButton(ButtonState state) => state switch
+    {
+        ButtonState.Unknown => "?",
+        ButtonState.Missing => "找不到",
+        ButtonState.Disabled => "停用",
+        ButtonState.Hidden => "看不見",
+        ButtonState.WrongLabel => "文字對不上",
+        _ => "可按",
+    };
+
     /// <summary>Addon 表的交易確認句；讀不到時回 <see langword="null"/>（之後的比對一律不中＝不按）。</summary>
     private static string? TemplateText
     {
@@ -235,6 +408,20 @@ internal unsafe class TradeAutoConfirm : BaseFeature
             if (string.IsNullOrEmpty(templateText))
                 PluginLog.Warning($"{Tag} 讀不到 Addon#{TradeConfirmAddonRow} 的交易確認句，交易自動確認不會動作。");
             return templateText;
+        }
+    }
+
+    /// <summary>Addon 表的「提出條件」；讀不到時回 <see langword="null"/>（按鈕一律判成文字對不上＝不按）。</summary>
+    private static string? OfferLabelText
+    {
+        get
+        {
+            if (offerLabelLoaded) return offerLabelText;
+            offerLabelLoaded = true;
+            offerLabelText = GenericHelpers.GetRow<Addon>(OfferLabelAddonRow)?.Text.GetText()?.Trim();
+            if (string.IsNullOrEmpty(offerLabelText))
+                PluginLog.Warning($"{Tag} 讀不到 Addon#{OfferLabelAddonRow} 的按鈕文字，自動按「提出條件」不會動作。");
+            return offerLabelText;
         }
     }
 

@@ -552,12 +552,12 @@ public static class Bothers
     private static void DrawPlayerTrade()
     {
         var enabled = C.TradeAutoConfirm;
-        if (ImGui.Checkbox("Auto-confirm after the trade partner confirms".Loc(), ref enabled))
+        if (ImGui.Checkbox("Auto-offer and confirm after the trade partner offers".Loc(), ref enabled))
         {
             C.TradeAutoConfirm = enabled;
             C.Save();
         }
-        ImGuiX.IndentedTextColored("When both sides have locked in and the other player has already confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).".Loc());
+        ImGuiX.IndentedTextColored("Step 1: when the other player has pressed Offer and the trade contents have not changed for 1 second, press Offer for you (at most once per trade). If the contents change after the other player offered, you press it yourself; while you are typing a quantity or have a menu open, it waits. Step 2: when the other player has confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).".Loc());
         if (!C.TradeAutoConfirm) return;
 
         using var indent = ImRaii.PushIndent();
@@ -568,7 +568,7 @@ public static class Bothers
             C.TradeAutoConfirmPress = press;
             C.Save();
         }
-        ImGuiX.IndentedTextColored("Off = log mode: nothing is pressed, the log only says it would have. Trade once with an alt first and check in the log that the partner's confirmed state (other=6) shows up before you press, then turn this on.".Loc());
+        ImGuiX.IndentedTextColored("Off = log mode: nothing is pressed, the log only says it would have.".Loc());
 
         ImGui.Spacing();
         ImGui.TextUnformatted("Timed auto-confirm".Loc());
