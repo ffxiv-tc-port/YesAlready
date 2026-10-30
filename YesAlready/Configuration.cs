@@ -106,6 +106,9 @@ public partial class Configuration() : IPluginConfiguration
     /// <summary>條件成立時真的按「確定」；關著＝只寫「本來會按」的紀錄。</summary>
     public bool TradeAutoConfirmPress { get; set; } = false;
 
+    /// <summary>第一段（替我方按「提出條件」）前，對方提出條件與交易內容要維持不變的毫秒數。</summary>
+    public int TradeOfferSettleMs { get; set; } = 1000;
+
     public bool TradeWhitelistEnabled { get; set; } = false;
     public List<TradePartnerEntry> TradeWhitelist { get; set; } = [];
 

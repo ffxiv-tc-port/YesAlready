@@ -557,7 +557,7 @@ public static class Bothers
             C.TradeAutoConfirm = enabled;
             C.Save();
         }
-        ImGuiX.IndentedTextColored("Step 1: when the other player has pressed Offer and the trade contents have not changed for 1 second, press Offer for you (at most once per trade). If the contents change after the other player offered, you press it yourself; while you are typing a quantity or have a menu open, it waits. Step 2: when the other player has confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).".Loc());
+        ImGuiX.IndentedTextColored("Step 1: when the other player has pressed Offer and the trade contents have not changed for the delay set below, press Offer for you (at most once per trade). If the contents change after the other player offered, you press it yourself; while you are typing a quantity or have a menu open, it waits. Step 2: when the other player has confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).".Loc());
         if (!C.TradeAutoConfirm) return;
 
         using var indent = ImRaii.PushIndent();
@@ -569,6 +569,15 @@ public static class Bothers
             C.Save();
         }
         ImGuiX.IndentedTextColored("Off = log mode: nothing is pressed, the log only says it would have.".Loc());
+
+        var settleMs = C.TradeOfferSettleMs;
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.SliderInt("Offer delay (ms)".Loc(), ref settleMs, 0, TradeConfirmRules.MaxOfferSettleMs))
+        {
+            C.TradeOfferSettleMs = Math.Clamp(settleMs, 0, TradeConfirmRules.MaxOfferSettleMs);
+            C.Save();
+        }
+        ImGuiX.IndentedTextColored("How long the other player's offer and the trade contents must stay unchanged before Offer is pressed for you.".Loc());
 
         ImGui.Spacing();
         ImGui.TextUnformatted("Timed auto-confirm".Loc());

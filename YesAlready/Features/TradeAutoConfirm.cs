@@ -192,7 +192,7 @@ internal unsafe class TradeAutoConfirm : BaseFeature
     {
         var inputs = new TradeOfferInputs(local, remote, window == WindowState.Ready, offerPressed, remoteOfferContentChanged,
             button == ButtonState.Ready, false, TradeConfirmRules.StableMs(remoteOfferSince, lastContentChangeAt, now),
-            false, false, false, false, false, false);
+            false, false, false, false, false, false, Math.Clamp(C.TradeOfferSettleMs, 0, TradeConfirmRules.MaxOfferSettleMs));
         if (TradeConfirmRules.DecideOffer(inputs) == TradeConfirmVerdict.NotReady)
         {
             lastOfferDecision = null;
@@ -219,7 +219,7 @@ internal unsafe class TradeAutoConfirm : BaseFeature
             TradeConfirmVerdict.ContentChanged => "不按：對方提出條件後交易內容又變了，這次請自己按",
             TradeConfirmVerdict.ButtonNotReady => $"不按：「提出條件」鈕{DescribeButton(button)}",
             TradeConfirmVerdict.UserBusy => $"等待：你正在操作（{busyAddon} 開著）",
-            TradeConfirmVerdict.Settling => $"等待：對方提出條件與交易內容要維持 {TradeConfirmRules.OfferSettleMs}ms 不變",
+            TradeConfirmVerdict.Settling => $"等待：對方提出條件與交易內容要維持 {inputs.SettleMs}ms 不變",
             _ => DescribeCommon(verdict, basis, partnerDetail, inputs.PluginActive, inputs.Muted, busyDetail),
         };
         if (!string.Equals(decision, lastOfferDecision, StringComparison.Ordinal))

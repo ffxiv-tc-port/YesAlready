@@ -59,7 +59,8 @@ internal readonly record struct TradeOfferInputs(
     bool PluginActive,
     bool Muted,
     bool OtherPluginBusy,
-    bool PressEnabled);
+    bool PressEnabled,
+    long SettleMs = TradeConfirmRules.OfferSettleMs);
 
 internal readonly record struct TradeConfirmInputs(
     int LocalState,
@@ -97,8 +98,10 @@ internal static class TradeConfirmRules
     /// <summary>CS <c>TradeState.LockedIn</c>：按了「提出條件」、等另一方。</summary>
     public const int StateLockedIn = 4;
 
-    /// <summary>第一段按之前，對方提出條件與交易內容都要維持不變這麼久。</summary>
+    /// <summary>第一段按之前，對方提出條件與交易內容都要維持不變這麼久（預設值；實際用設定 <c>TradeOfferSettleMs</c>）。</summary>
     public const long OfferSettleMs = 1000;
+
+    public const int MaxOfferSettleMs = 5000;
 
     public const int DefaultTimedMinutes = 5;
     public const int MaxTimedMinutes = 60;
@@ -119,7 +122,7 @@ internal static class TradeConfirmRules
             return TradeConfirmVerdict.ButtonNotReady;
         if (i.UserBusy)
             return TradeConfirmVerdict.UserBusy;
-        if (i.StableMs < OfferSettleMs)
+        if (i.StableMs < i.SettleMs)
             return TradeConfirmVerdict.Settling;
         if (!i.PluginActive || i.Muted || i.OtherPluginBusy)
             return TradeConfirmVerdict.Yielding;
