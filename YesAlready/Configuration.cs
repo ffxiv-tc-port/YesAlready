@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace YesAlready;
 
@@ -149,7 +150,19 @@ public partial class Configuration() : IPluginConfiguration
         return conf ?? new Configuration();
     }
 
-    public void Save() => Svc.PluginInterface.SavePluginConfig(this);
+    public void Save()
+    {
+        MarkRulesChanged();
+        Svc.PluginInterface.SavePluginConfig(this);
+    }
+
+    /// <summary>規則樹的世代號：任何可能改動規則的地方都要遞增（存檔、設定視窗每畫一幀）。</summary>
+    /// <remarks>靜態欄位，不進設定檔。讀端拿它判快取過期，不拿來比大小。</remarks>
+    private static int rulesVersion;
+
+    internal static int RulesVersion => Volatile.Read(ref rulesVersion);
+
+    internal static void MarkRulesChanged() => Interlocked.Increment(ref rulesVersion);
 
     public IEnumerable<ITextNode> GetAllNodes() => new ITextNode[]
         {

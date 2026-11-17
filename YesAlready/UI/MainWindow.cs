@@ -61,6 +61,9 @@ internal class MainWindow : Window
 
     public override void Draw()
     {
+        // 規則可以在這個視窗裡改而不存檔（勾選、改字），所以開著的每一幀都讓規則快取過期。
+        Configuration.MarkRulesChanged();
+
         // 🔑 阻擋清單與壓制租約都會讓 YesAlready 停手，兩者都要顯示、
         // 「強制解除鎖定」也要兩邊一起清 —— 只清一邊的話按鈕按了沒反應，
         // 使用者會判定成「這個按鈕壞了」而不是「還有另一個外掛壓著」。

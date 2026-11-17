@@ -10,6 +10,9 @@ internal class Talk : TextMatchingFeature
 
     private long _lastForcedTick;
 
+    private int _rulesVersionSeen = -1;
+    private bool _hasActiveRules;
+
     protected override unsafe string GetSetLastSeenText(AtkUnitBase* atk)
     {
         var text = Svc.Targets.Target is { Name: var name } ? name.TextValue : string.Empty;
@@ -29,6 +32,9 @@ internal class Talk : TextMatchingFeature
             return true;
         }
 
+        // PostUpdate 每幀都走到這裡：沒有任何可用的 Talk 規則時不走整棵規則樹（結果同樣是 null）。
+        if (!HasActiveRules()) return null;
+
         var nodes = C.GetAllNodes().OfType<TalkEntryNode>();
         foreach (var node in nodes)
         {
@@ -40,6 +46,18 @@ internal class Talk : TextMatchingFeature
         }
 
         return null;
+    }
+
+    /// <summary>規則樹裡有沒有至少一條會被 <see cref="ShouldProceed"/> 拿來比的 Talk 規則；規則世代號變了才重算。</summary>
+    private bool HasActiveRules()
+    {
+        var version = Configuration.RulesVersion;
+        if (version != _rulesVersionSeen)
+        {
+            _hasActiveRules = C.GetAllNodes().OfType<TalkEntryNode>().Any(n => n.Enabled && !string.IsNullOrEmpty(n.TargetText));
+            _rulesVersionSeen = version;
+        }
+        return _hasActiveRules;
     }
 
     protected override unsafe void Proceed(AtkUnitBase* atk, object? matchingNode)
