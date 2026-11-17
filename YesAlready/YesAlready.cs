@@ -384,6 +384,7 @@ public class YesAlready : IDalamudPlugin
                 break;
             default:
                 PluginLog.Error("I didn't quite understand that.");
+                Svc.Chat.PrintPluginMessage("Unknown command. Type ?? for help.".Loc($"{Command} help"));
                 return;
         }
     }
@@ -415,6 +416,7 @@ public class YesAlready : IDalamudPlugin
         if (text.IsNullOrEmpty())
         {
             PluginLog.Error("No dialog has been seen.");
+            Svc.Chat.PrintPluginMessage("No Yes/No dialog has been seen yet, so nothing was added.".Loc());
             return;
         }
 
@@ -431,6 +433,7 @@ public class YesAlready : IDalamudPlugin
         if (text.IsNullOrEmpty())
         {
             PluginLog.Error("No dialog has been seen.");
+            Svc.Chat.PrintPluginMessage("No OK dialog has been seen yet, so nothing was added.".Loc());
             return;
         }
 
@@ -448,6 +451,7 @@ public class YesAlready : IDalamudPlugin
         if (text.IsNullOrEmpty())
         {
             PluginLog.Error("No dialog has been selected.");
+            Svc.Chat.PrintPluginMessage("No list option has been selected yet, so nothing was added.".Loc());
             return;
         }
 
@@ -473,6 +477,7 @@ public class YesAlready : IDalamudPlugin
         if (target.IsNullOrEmpty())
         {
             PluginLog.Error("No talk dialog has been seen.");
+            Svc.Chat.PrintPluginMessage("No target has been seen during a Talk dialog yet, so nothing was added.".Loc());
             return;
         }
 
