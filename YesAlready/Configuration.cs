@@ -138,18 +138,6 @@ public partial class Configuration() : IPluginConfiguration
         AllDifferent = 1,
     }
 
-    public static Configuration Load(DirectoryInfo configDirectory)
-    {
-        var pluginConfigPath = new FileInfo(Path.Combine(configDirectory.Parent!.FullName, "YesAlready.json"));
-
-        if (!pluginConfigPath.Exists)
-            return new Configuration();
-
-        var data = File.ReadAllText(pluginConfigPath.FullName);
-        var conf = JsonConvert.DeserializeObject<Configuration>(data);
-        return conf ?? new Configuration();
-    }
-
     public void Save()
     {
         MarkRulesChanged();

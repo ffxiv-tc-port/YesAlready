@@ -12,14 +12,11 @@ using System.Collections.Generic;
 using System.Numerics;
 using YesAlready.IPC;
 using YesAlready.UI.Tabs;
-using static YesAlready.UI.Tabs.CoreTab;
 
 namespace YesAlready.UI;
 
 internal class MainWindow : Window
 {
-    private static readonly CoreTab coreTab = new();
-
     public MainWindow() : base($"{Name} {P.GetType().Assembly.GetName().Version}###{Name}")
     {
         Size = new Vector2(525, 600);
@@ -99,7 +96,6 @@ internal class MainWindow : Window
         using var tabs = ImRaii.TabBar("Tabs");
         if (tabs)
         {
-            //coreTab.Draw();
             DisplayGenericOptions("YesNo".Loc(), YesNo.DrawButtons, () => DisplayNodes(YesNoRootFolder, () => new TextEntryNode() { Enabled = false, Text = "Add some text here!" }));
             DisplayGenericOptions("Ok".Loc(), Ok.DrawButtons, () => DisplayNodes(OkRootFolder, () => new OkEntryNode() { Enabled = false, Text = "Add some text here!" }));
             DisplayGenericOptions("List".Loc(), Lists.DrawButtons, () => DisplayNodes(ListRootFolder, () => new ListEntryNode() { Enabled = false, Text = "Add some text here!" }));
@@ -450,10 +446,6 @@ internal class MainWindow : Window
 
     public static void TextNodeDragDrop(ITextNode node)
     {
-        // Don't allow drag and drop in Alphabetical or Folders view
-        if (coreTab.CurrentViewMode != ViewMode.ByType)
-            return;
-
         // Don't allow drag and drop for root folders
         if (node == YesNoRootFolder || node == ListRootFolder || node == TalkRootFolder)
             return;
