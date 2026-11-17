@@ -89,19 +89,20 @@ internal static class BotherPauses
         List<string>? logs = null;
         var duration = ClampDuration(milliseconds, key, ref logs);
         var until = Environment.TickCount64 + duration;
-        bool alreadyLonger;
+        bool wasPaused;
 
         lock (Gate)
         {
             SweepLocked(ref logs);
 
-            alreadyLonger = PausedUntil.TryGetValue(key, out var existing) && existing >= until;
-            if (!alreadyLonger) PausedUntil[key] = until;
+            wasPaused = PausedUntil.TryGetValue(key, out var existing);
+            if (!wasPaused || existing < until) PausedUntil[key] = until;
             anyPauses = true;
         }
 
         Flush(logs);
-        if (alreadyLonger) return;
+        // 只在「沒暫停→暫停」寫；續約型呼叫端（每 500 ms 延長一次）會洗版，結束由到期／提早解除那行記。
+        if (wasPaused) return;
 
         PluginLog.Information($"[BotherPause] 「{key}」暫停 {duration} 毫秒。");
     }
