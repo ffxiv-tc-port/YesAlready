@@ -5,7 +5,17 @@ namespace YesAlready.IPC;
 
 public class YesAlreadyIPC
 {
-    public YesAlreadyIPC() => EzIPC.Init(this);
+    private readonly EzIPCDisposalToken[] tokens;
+
+    public YesAlreadyIPC() => tokens = EzIPC.Init(this);
+
+    /// <summary>註銷本類別提供的全部端點（冪等）。</summary>
+    /// <remarks>🔴 要在 <c>ECommonsMain.Dispose</c> 之前呼叫：它先清 <c>Service.*</c> 才註銷 IPC，中間進來的查詢會 NRE。</remarks>
+    internal void Unregister()
+    {
+        foreach (var token in tokens)
+            token.Dispose();
+    }
 
     #region 查詢
 
@@ -42,14 +52,10 @@ public class YesAlreadyIPC
     public string[] GetSuppressionOwners()
     {
         var leases = SuppressionLeases.Owners;
-        var blockList = Service.BlockListHandler.BlockList;
+        // 阻擋清單是跨插件共用的 HashSet、這支跑在呼叫端執行緒：先抄快照再組，不拿 Count 配好陣列再 CopyTo。
+        var blockList = Service.BlockListHandler.SnapshotNames();
 
-        if (blockList.Count == 0) return leases;
-
-        var result = new string[leases.Length + blockList.Count];
-        leases.CopyTo(result, 0);
-        blockList.CopyTo(result, leases.Length);
-        return result;
+        return blockList.Length == 0 ? leases : [.. leases, .. blockList];
     }
 
     #endregion

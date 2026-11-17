@@ -282,15 +282,22 @@ public class BlockListHandler : IDisposable
     }
 
     /// <summary>把共用的 <c>HashSet</c> 抄成陣列；別的外掛正在改就回空陣列（下一輪再來）。</summary>
-    private string[] SnapshotNames()
+    /// <remarks>
+    /// <c>ToArray</c> 對 <c>ICollection</c> 走「Count 配陣列再 CopyTo」：中途變多擲 <see cref="ArgumentException"/>、
+    /// 變少留下 null 格，所以兩種都要處理。
+    /// </remarks>
+    internal string[] SnapshotNames()
     {
+        string[] names;
         try
         {
-            return BlockList.ToArray();
+            names = BlockList.ToArray();
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
             return [];
         }
+
+        return Array.IndexOf(names, null) < 0 ? names : Array.FindAll(names, n => n != null);
     }
 }

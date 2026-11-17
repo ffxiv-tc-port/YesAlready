@@ -294,6 +294,8 @@ public class YesAlready : IDalamudPlugin
     public void Dispose()
     {
         Svc.PluginInterface.UiBuilder.OpenMainUi -= EzConfigGui.Toggle;
+        // 先關 IPC 入口：之後丟租約／暫停時不會再有人從外面加進來，ECommonsMain.Dispose 清 Service.* 時也沒人查得到。
+        Service.IPC?.Unregister();
         // 租約是行程內的靜態狀態：外掛被停用／重載時一定要丟掉，否則重新載入之後
         // 舊的租約還壓著，而它的租用者早就沒有那把 Guid 可以交回了。
         SuppressionLeases.ReleaseAll("YesAlready 卸載");
