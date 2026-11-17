@@ -129,7 +129,7 @@ internal static class BotherPauses
     /// </summary>
     /// <remarks>
     /// 🔑 這支就是實際的閘門，掛在 <c>AddonFeature.OnAddonEvent</c>、
-    /// <c>TextMatchingFeature.OnRetryTick</c> 與 <c>CustomAddonCallbacks.AddonSetup</c> 上。
+    /// <c>TextMatchingFeature.OnRetryTick</c>、<c>CustomAddonCallbacks.AddonSetup</c> 與 <c>AddonFeature.GateOpen</c>（事件之後才跑的步驟）上。
     /// 每個 addon 事件都會走到，所以常態（沒有任何暫停也沒有待套用請求）是兩個欄位讀取。
     /// </remarks>
     public static bool IsMuted(string key)

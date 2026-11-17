@@ -29,8 +29,9 @@ internal class RetainerTaskResult : AddonFeature
             // 捕獲它等於跨幀保存原生指標,視窗被拆掉之後就是攔不到的 AccessViolationException。
             // 正解＝排入佇列時只留「要做什麼」,執行的當下才重新解析視窗。
             // 📌 重解不會對到別的一扇:上面這支 TryGetAddonMaster 本來就是照型別名稱查 index 1。
-            Service.TaskManager.Enqueue(IsReassignEnabled);
-            Service.TaskManager.Enqueue(Reassign);
+            var chain = new PressChain();
+            Service.TaskManager.Enqueue(() => IsReassignEnabled(chain), nameof(IsReassignEnabled));
+            Service.TaskManager.Enqueue(() => Reassign(chain), nameof(Reassign));
         }
     }
 
@@ -39,14 +40,16 @@ internal class RetainerTaskResult : AddonFeature
     /// 視窗不在、或按鈕(含它的 <c>OwnerNode</c>)還沒好時回 <see langword="false"/>,讓 TaskManager
     /// 繼續等,而不是丟無法攔截的 <c>AccessViolationException</c>。
     /// </remarks>
-    private static unsafe bool IsReassignEnabled()
-        => GenericHelpers.TryGetAddonMaster<AddonMaster.RetainerTaskResult>(out var am)
-           && GenericHelpers.IsComponentEnabled(am.ReassignButton);
+    private unsafe bool IsReassignEnabled(PressChain chain)
+        => !ChainStillOwned(chain, nameof(IsReassignEnabled))
+           || GenericHelpers.TryGetAddonMaster<AddonMaster.RetainerTaskResult>(out var am)
+              && GenericHelpers.IsComponentEnabled(am.ReassignButton);
 
     /// <summary>執行的當下重新解析視窗再按下去;視窗不在就這一發不送。</summary>
     /// <remarks>維持 <c>Action</c> 型任務(一次性、跑完就算完成)。</remarks>
-    private static void Reassign()
+    private void Reassign(PressChain chain)
     {
+        if (!ChainStillOwned(chain, nameof(Reassign))) return;
         if (GenericHelpers.TryGetAddonMaster<AddonMaster.RetainerTaskResult>(out var am))
             am.Reassign();
     }

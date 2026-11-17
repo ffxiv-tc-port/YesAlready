@@ -121,9 +121,9 @@ internal class SatisfactionSupply : AddonFeature
         ResetTurnInAttempts();
     }
 
-    private static unsafe void RequestFill(IFramework framework)
+    private unsafe void RequestFill(IFramework framework)
     {
-        if (!P.Active || !C.CustomDeliveries || !GenericHelpers.TryGetAddonByName<AddonRequest>("SatisfactionSupply", out var _))
+        if (!GateOpen || !GenericHelpers.TryGetAddonByName<AddonRequest>("SatisfactionSupply", out var _))
             return;
 
         if (GenericHelpers.TryGetAddonByName<AddonRequest>("Request", out var addon) && GenericHelpers.IsAddonReady((AtkUnitBase*)addon))
@@ -165,11 +165,11 @@ internal class SatisfactionSupply : AddonFeature
     /// <see langword="null"/>(null 會清掉整條佇列)。Request 真的收掉時 <see cref="RequestFill"/>
     /// 會走 else 分支 Abort();就算沒走到,NeoTaskManager 的 30 秒逾時也會把佇列清乾淨。
     /// </remarks>
-    private static unsafe bool? TryFillRequestSlot(int i)
+    private unsafe bool? TryFillRequestSlot(int i)
     {
         if (SlotsFilled.Contains(i)) return true;
-        // 排入之後才換主人（被租約壓住、或 TextAdvance 接手）時丟掉這筆；還輪到我們時 RequestFill 下一幀會重排。
-        if (!P.Active || !C.CustomDeliveries
+        // 排入之後才換主人（被租約壓住、被暫停、或 TextAdvance 接手）時丟掉這筆；還輪到我們時 RequestFill 下一幀會重排。
+        if (!GateOpen
             || TextAdvanceIpc.Query(TextAdvanceIpc.RequestFill, "SatisfactionSupply.RequestFill") != TextAdvanceIpc.Handling.NotHandling)
             return true;
 
@@ -208,9 +208,9 @@ internal class SatisfactionSupply : AddonFeature
         }
     }
 
-    private static unsafe void RequestComplete(IFramework framework)
+    private unsafe void RequestComplete(IFramework framework)
     {
-        if (!P.Active || !C.CustomDeliveries || !GenericHelpers.TryGetAddonByName<AddonRequest>("SatisfactionSupply", out var _))
+        if (!GateOpen || !GenericHelpers.TryGetAddonByName<AddonRequest>("SatisfactionSupply", out var _))
             return;
 
         if (GenericHelpers.TryGetAddonByName<AtkUnitBase>("Request", out var addon) && GenericHelpers.IsAddonReady(addon))
