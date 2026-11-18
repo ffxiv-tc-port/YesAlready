@@ -22,7 +22,7 @@ internal static class ImGuiX
             ImGui.TextUnformatted(text);
     }
 
-    public static bool IconButton(FontAwesomeIcon icon) => IconButton(icon);
+    public static bool IconButton(FontAwesomeIcon icon) => IconButton(icon, null!);
 
     public static bool IconButton(FontAwesomeIcon icon, string tooltip, int width = -1, string id = "")
     {
