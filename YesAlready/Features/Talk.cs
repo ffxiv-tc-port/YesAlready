@@ -1,4 +1,7 @@
+using Dalamud.Game.ClientState.Objects.Types;
+using System;
 using System.Linq;
+using CSGameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
 namespace YesAlready.Features;
 
@@ -10,14 +13,43 @@ internal class Talk : TextMatchingFeature
 
     private long _lastForcedTick;
 
-    private int _rulesVersionSeen = -1;
-    private bool _hasActiveRules;
+    // 規則世代號或設定實例換了才重建；節點的啟用與目標文字仍在比對時現讀。
+    private int _rulesVersionSeen;
+    private Configuration? _rulesConfigSeen;
+    private TalkEntryNode[] _talkNodes = [];
+
+    // 鍵是目標名字的原始位元組（SeString.Parse 只吃這段），不留任何原生指標或物件包裝。
+    private readonly byte[] _targetNameKey = new byte[64];
+    private int _targetNameKeyLength = -1;
+    private string _targetNameText = string.Empty;
 
     protected override unsafe string GetSetLastSeenText(AtkUnitBase* atk)
     {
-        var text = Svc.Targets.Target is { Name: var name } ? name.TextValue : string.Empty;
+        var text = Svc.Targets.Target is { } target ? TargetName(target) : string.Empty;
         Service.Watcher.LastSeenTalkTarget = text;
         return text;
+    }
+
+    /// <summary>等同 <c>target.Name.TextValue</c>；名字位元組與上次相同就回上次的字串。</summary>
+    private unsafe string TargetName(IGameObject target)
+    {
+        ReadOnlySpan<byte> raw = ((CSGameObject*)target.Address)->Name;
+        var end = raw.IndexOf((byte)0);
+        var name = end < 0 ? raw : raw[..end];
+        if (_targetNameKeyLength >= 0 && name.SequenceEqual(_targetNameKey.AsSpan(0, _targetNameKeyLength)))
+            return _targetNameText;
+
+        _targetNameText = target.Name.TextValue;
+        if (name.Length <= _targetNameKey.Length)
+        {
+            name.CopyTo(_targetNameKey);
+            _targetNameKeyLength = name.Length;
+        }
+        else
+        {
+            _targetNameKeyLength = -1;
+        }
+        return _targetNameText;
     }
 
     protected override unsafe object? ShouldProceed(string text, AtkUnitBase* atk)
@@ -32,11 +64,7 @@ internal class Talk : TextMatchingFeature
             return true;
         }
 
-        // PostUpdate 每幀都走到這裡：沒有任何可用的 Talk 規則時不走整棵規則樹（結果同樣是 null）。
-        if (!HasActiveRules()) return null;
-
-        var nodes = C.GetAllNodes().OfType<TalkEntryNode>();
-        foreach (var node in nodes)
+        foreach (var node in TalkNodes())
         {
             if (!node.Enabled || string.IsNullOrEmpty(node.TargetText))
                 continue;
@@ -48,16 +76,19 @@ internal class Talk : TextMatchingFeature
         return null;
     }
 
-    /// <summary>規則樹裡有沒有至少一條會被 <see cref="ShouldProceed"/> 拿來比的 Talk 規則；規則世代號變了才重算。</summary>
-    private bool HasActiveRules()
+    /// <summary>規則樹裡全部的 Talk 規則，順序同 <see cref="Configuration.GetAllNodes()"/>。</summary>
+    /// <remarks>PostUpdate 每幀都走到這裡，所以只在規則世代號或 <c>C</c> 換了才重新走訪整棵樹。</remarks>
+    private TalkEntryNode[] TalkNodes()
     {
         var version = Configuration.RulesVersion;
-        if (version != _rulesVersionSeen)
+        var config = C;
+        if (version != _rulesVersionSeen || !ReferenceEquals(config, _rulesConfigSeen))
         {
-            _hasActiveRules = C.GetAllNodes().OfType<TalkEntryNode>().Any(n => n.Enabled && !string.IsNullOrEmpty(n.TargetText));
+            _talkNodes = [.. config.GetAllNodes().OfType<TalkEntryNode>()];
             _rulesVersionSeen = version;
+            _rulesConfigSeen = config;
         }
-        return _hasActiveRules;
+        return _talkNodes;
     }
 
     protected override unsafe void Proceed(AtkUnitBase* atk, object? matchingNode)

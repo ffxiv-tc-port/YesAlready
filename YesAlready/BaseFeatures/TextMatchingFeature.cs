@@ -5,6 +5,7 @@ using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using YesAlready.IPC;
 
@@ -151,6 +152,12 @@ public abstract class TextMatchingFeature : AddonFeature
         Process(atk);
     }
 
+    private static readonly ConditionalWeakTable<string, string> RegexBodies = new();
+
+    // 規則字串是設定裡長駐的同一個實例：每幀評估的 Talk 不必每次 Trim 出新字串。
+    private static string RegexBody(string foldedPattern)
+        => RegexBodies.GetValue(foldedPattern, static p => p.Trim('/'));
+
     protected bool EntryMatchesText(string pattern, string text, bool isRegex)
     {
         if (string.IsNullOrEmpty(pattern)) return false;
@@ -161,7 +168,7 @@ public abstract class TextMatchingFeature : AddonFeature
         {
             try
             {
-                var regex = RegexExtensions.TryCreateRegex(foldedPattern.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                var regex = RegexExtensions.TryCreateRegex(RegexBody(foldedPattern), RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 if (regex is null)
                 {
                     LogError($"Invalid regex pattern {pattern}");
@@ -198,7 +205,7 @@ public abstract class TextMatchingFeature : AddonFeature
         {
             try
             {
-                var regex = RegexExtensions.TryCreateRegex(foldedPattern.Trim('/'), RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                var regex = RegexExtensions.TryCreateRegex(RegexBody(foldedPattern), RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 if (regex is null)
                 {
                     LogError($"Invalid regex pattern {pattern}");
