@@ -1,10 +1,13 @@
 using Dalamud.Game.ClientState.Keys;
+using Dalamud.Interface;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Linq;
+using System.Text;
 
 namespace YesAlready.UI.Tabs;
 public static class Bothers
@@ -25,15 +28,151 @@ public static class Bothers
         VirtualKey.SHIFT,
     ];
 
+    #region Search
+
+    /// <summary>搜尋比對用的英文原文（同時是 loc 鍵）；比對時英文與繁中都看。</summary>
+    private readonly record struct Entry(string Label, string Desc);
+
+    private static class E
+    {
+        public static readonly Entry DisableHotkey = new("Disable Hotkey", "While this key is held, the plugin is disabled.");
+        public static readonly Entry ForcedYesHotkey = new("Forced Yes Hotkey", "2. While this key is held, any Yes/No prompt will always default to yes, and all talk dialogue will be skipped. Be careful.");
+        public static readonly Entry SeparateForcedKeys = new("Separate Yes/Talk", "");
+        public static readonly Entry ForcedTalkHotkey = new("Forced Talk Hotkey", "");
+
+        public static readonly Entry SalvageDialog = new("SalvageDialog", "Remove the Desynthesis menu confirmation.");
+        public static readonly Entry DesynthBulk = new("Desynthesize until none are left", "Before confirming, also tick the game's own checkbox to keep desynthesizing until none of the item are left. The game only offers it when you hold more than one.");
+        public static readonly Entry SalvageResults = new("SalvageResults", "Automatically closes the SalvageResults window when done desynthesizing.");
+        public static readonly Entry PurifyResult = new("PurifyResult", "Automatically closes the PurifyResult window when done reducing.");
+        public static readonly Entry PurifyAutomatic = new("PurifyResult (Automatic)", "Press the game's own Automatic button on the PurifyResult window, so the game reduces every remaining item by itself. You still reduce the first item yourself.");
+
+        public static readonly Entry MateriaAttach = new("MateriaAttachDialog", "Remove the materia melding confirmation menu.");
+        public static readonly Entry Materialize = new("MaterializeDialog", "Remove the create new (extract) materia confirmation.");
+        public static readonly Entry MateriaRetrieve = new("MateriaRetrieveDialog", "Remove the retrieve materia confirmation.");
+
+        public static readonly Entry RetainerTaskAsk = new("RetainerTaskAsk", "Skip the confirmation in the final dialog before sending out a retainer.");
+        public static readonly Entry RetainerTaskResult = new("RetainerTaskResult", "Automatically send a retainer on the same venture as before when receiving an item.");
+        public static readonly Entry RetainerTransferList = new("RetainerItemTransferList", "Skip the confirmation in the RetainerItemTransferList window to entrust all items to the retainer.");
+        public static readonly Entry RetainerTransferProgress = new("RetainerItemTransferProgress", "Automatically closes the RetainerItemTransferProgress window when finished entrusting items.");
+        public static readonly Entry AirShipFinalize = new("AirShipExplorationResult - Finalize", "Automatically finalize submersible reports when the AirShipExplorationResult window opens.");
+        public static readonly Entry AirShipRedeploy = new("AirShipExplorationResult - Redeploy", "Automatically redeploy submersibles when the AirShipExplorationResult window opens.");
+
+        public static readonly Entry ContentsFinderConfirm = new("ContentsFinderConfirm", "Automatically commence duties when ready.");
+        public static readonly Entry ContentsFinderOneTime = new("ContentsFinderOneTimeConfirm", "Automatically commence duties when ready, but only once. Requires Contents Finder Confirm, and disables both after activation.");
+
+        public static readonly Entry MKSRecord = new("MKSRecord", "Automatically leave the Crystalline Conflict match when the results appear.");
+        public static readonly Entry FrontlineRecord = new("FrontlineRecord", "Automatically leave the Frontline match when the results appear.");
+
+        public static readonly Entry LotteryWeekly = new("LotteryWeeklyInput", "Automatically purchase a Jumbo Cactpot ticket when the number entry window opens.");
+        public static readonly Entry HWDLottery = new("HWDLottery", "Automatically select a kupo of fortune reward. This will instantly complete a single kupo ticket but is unable to continue to the next automatically.");
+        public static readonly Entry LovmResult = new("LovmResult", "Automatically quit Lord of Verminion when the results menu appears.");
+        public static readonly Entry FGSEnter = new("FGSEnterDialog", "Automatically register for Blunderville when speaking with the Blunderville Registrar.");
+        public static readonly Entry FGSExit = new("FGSExitDialog", "Automatically confirm the exit prompt when leaving Blunderville.");
+        public static readonly Entry FashionCheck = new("FashionCheck", "Automatically confirm the Fashion Reports results.");
+        public static readonly Entry RaceChocobo = new("RaceChocoboResult", "Automatically quit Chocobo Racing when the results menu appears.");
+        public static readonly Entry ShopCard = new("ShopCardDialog", "Automatically confirm selling Triple Triad cards in the saucer.");
+
+        public static readonly Entry InclusionShopRemember = new("InclusionShopRemember", "Remember the last panel visited on the scrip exchange window.");
+        public static readonly Entry ShopExchangeItem = new("ShopExchangeItemDialog", "Automatically exchange items/currencies in various shops (e.g., scrip vendors).");
+
+        public static readonly Entry SatisfactionSupply = new("SatisfactionSupply", "Automatically turn in any available collectibles for Custom Deliveries.");
+        public static readonly Entry GCSupplyReward = new("GrandCompanySupplyReward", "Skip the confirmation when submitting Grand Company expert delivery items.");
+        public static readonly Entry JournalResultComplete = new("JournalResultComplete", "Automatically confirm quest reward acceptance when there is nothing to choose.");
+        public static readonly Entry GuildLeveDifficulty = new("GuildLeveDifficulty", "Automatically confirms guild leves upon initiation at the highest difficulty.");
+        public static readonly Entry DataCentreTravel = new("DataCentreTravelConfirm", "Automatically accept the Data Center travel confirmation.");
+        public static readonly Entry MiragePrismRemoveDispel = new("MiragePrismRemoveDispel", "Automatically dispel glamours when using Glamour Dispellers.");
+        public static readonly Entry MiragePrismExecuteCast = new("MiragePrismExecuteCast", "Automatically cast glamours when using Glamour Prisms.");
+        public static readonly Entry BannerPreviewUpdate = new("BannerPreviewUpdate", "Automatically update portraits.");
+
+        public static readonly Entry TradeAutoConfirm = new("Auto-offer and confirm after the trade partner offers", "Step 1: when the other player has pressed Offer and the trade contents have not changed for the delay set below, press Offer for you (at most once per trade). If the contents change after the other player offered, you press it yourself; while you are typing a quantity or have a menu open, it waits. Step 2: when the other player has confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).");
+        public static readonly Entry TradeTimed = new("Timed auto-confirm", "Any partner is accepted while it runs. Never saved: reloading the plugin, logging in or logging out always turns it off.");
+        public static readonly Entry TradeWhitelist = new("Trade partner whitelist", "Only partners on this list (name + home world) are auto-confirmed. If the partner cannot be verified, nothing is pressed.");
+
+        public static readonly Entry ItemInspection = new("ItemInspectionResult", "Eureka/Bozja lockboxes, forgotten fragments, and more. Warning: this does not check if you are maxed on items. Rate limiter (pause after N items).");
+        public static readonly Entry ItemInspectionRate = new("", "Rate limiter (pause after N items, 0 to disable).");
+        public static readonly Entry WKSAnnounceHide = new("WKSAnnounceHide", "Hide Cosmic Exploration announcements.");
+        public static readonly Entry WKSRewardHide = new("WKSRewardHide", "Automatically close the Cosmic Exploration rewards window.");
+
+        // 欄位初始化依文字順序執行 ⇒ 分類陣列必須寫在所有 Entry 之後。
+        public static readonly Entry[] Hotkeys = [DisableHotkey, ForcedYesHotkey, SeparateForcedKeys, ForcedTalkHotkey];
+        public static readonly Entry[] Desynth = [SalvageDialog, DesynthBulk, SalvageResults, PurifyResult, PurifyAutomatic];
+        public static readonly Entry[] Melding = [MateriaAttach, Materialize, MateriaRetrieve];
+        public static readonly Entry[] Retainers = [RetainerTaskAsk, RetainerTaskResult, RetainerTransferList, RetainerTransferProgress, AirShipFinalize, AirShipRedeploy];
+        public static readonly Entry[] Duties = [ContentsFinderConfirm, ContentsFinderOneTime];
+        public static readonly Entry[] PvP = [MKSRecord, FrontlineRecord];
+        public static readonly Entry[] Minigames = [LotteryWeekly, HWDLottery, LovmResult, FGSEnter, FGSExit, FashionCheck, RaceChocobo, ShopCard];
+        public static readonly Entry[] Shops = [InclusionShopRemember, ShopExchangeItem];
+        public static readonly Entry[] Other = [SatisfactionSupply, GCSupplyReward, JournalResultComplete, GuildLeveDifficulty, DataCentreTravel, MiragePrismRemoveDispel, MiragePrismExecuteCast, BannerPreviewUpdate];
+        public static readonly Entry[] Trade = [TradeAutoConfirm, TradeTimed, TradeWhitelist];
+        public static readonly Entry[] Forays = [ItemInspection, ItemInspectionRate, WKSAnnounceHide, WKSRewardHide];
+    }
+
+    // 輸入框直接讀寫固定位元組緩衝，內容沒變的幀不產生新字串。
+    private static readonly byte[] filterBuf = new byte[256];
+    private static string filter = string.Empty;
+    private static bool filterChanged;
+    private static bool anyHeaderShown;
+
+    private static bool Hit(string s) => s.Length > 0 && s.Contains(filter, StringComparison.OrdinalIgnoreCase);
+
+    private static bool HitLoc(string s) => s.Length > 0 && (Hit(s) || Hit(s.Loc()));
+
+    private static bool Hit(Entry e) => HitLoc(e.Label) || HitLoc(e.Desc);
+
+    /// <summary>沒有搜尋字、或分類名稱本身符合時 <paramref name="all"/> 為真＝整個分類照常顯示。</summary>
+    private static bool Show(bool all, Entry e) => all || Hit(e);
+
+    private static bool Header(string title, Entry[] entries, out bool all)
+    {
+        all = filter.Length == 0 || HitLoc(title);
+        if (!all)
+        {
+            var any = false;
+            foreach (var e in entries)
+                if (Hit(e)) { any = true; break; }
+            if (!any) return false;
+        }
+        anyHeaderShown = true;
+        if (filterChanged)
+            ImGui.SetNextItemOpen(filter.Length > 0);
+        return ImGui.CollapsingHeader(title.Loc());
+    }
+
+    private static void DrawFilterInput()
+    {
+        ImGui.SetNextItemWidth(250 * ImGuiHelpers.GlobalScale);
+        if (ImGui.InputTextWithHint("##BothersFilter", "Search...".Loc(), filterBuf))
+        {
+            var len = Array.IndexOf(filterBuf, (byte)0);
+            filter = Encoding.UTF8.GetString(filterBuf, 0, len < 0 ? filterBuf.Length : len).Trim();
+            filterChanged = true;
+        }
+
+        if (filter.Length == 0) return;
+        ImGui.SameLine();
+        if (ImGuiX.IconButton(FontAwesomeIcon.Times, "Clear search".Loc()))
+        {
+            Array.Clear(filterBuf);
+            filter = string.Empty;
+            filterChanged = true;
+        }
+    }
+
+    #endregion
+
     public static void Draw()
     {
         using var tab = ImRaii.TabItem("Bothers".Loc());
         if (!tab) return;
         using var idScope = ImRaii.PushId($"BothersOptions");
 
+        DrawFilterInput();
+        anyHeaderShown = false;
+        bool all;
+
         #region Hotkey Settings
 
-        if (ImGui.CollapsingHeader("Hotkey Settings".Loc()))
+        if (Header("Hotkey Settings", E.Hotkeys, out _))
         {
             // 1. Disable Hotkey
             if (!hotkeyValues.Contains(C.DisableKey))
@@ -45,13 +184,13 @@ public static class Bothers
             var disableHotkeyIndex = Array.IndexOf(hotkeyValues, C.DisableKey);
 
             ImGui.SetNextItemWidth(85);
-            if (ImGui.Combo("Disable Hotkey".Loc(), ref disableHotkeyIndex, hotkeyChoices, hotkeyChoices.Length))
+            if (ImGui.Combo(E.DisableHotkey.Label.Loc(), ref disableHotkeyIndex, hotkeyChoices, hotkeyChoices.Length))
             {
                 C.DisableKey = hotkeyValues[disableHotkeyIndex];
                 C.Save();
             }
 
-            ImGuiX.IndentedTextColored("While this key is held, the plugin is disabled.".Loc());
+            ImGuiX.IndentedTextColored(E.DisableHotkey.Desc.Loc());
 
             // 2. Forced Yes Hotkey
             if (!hotkeyValues.Contains(C.ForcedYesKey))
@@ -63,7 +202,7 @@ public static class Bothers
             var forcedYesHotkeyIndex = Array.IndexOf(hotkeyValues, C.ForcedYesKey);
 
             ImGui.SetNextItemWidth(85);
-            if (ImGui.Combo("Forced Yes Hotkey".Loc(), ref forcedYesHotkeyIndex, hotkeyChoices, hotkeyChoices.Length))
+            if (ImGui.Combo(E.ForcedYesHotkey.Label.Loc(), ref forcedYesHotkeyIndex, hotkeyChoices, hotkeyChoices.Length))
             {
                 C.ForcedYesKey = hotkeyValues[forcedYesHotkeyIndex];
                 C.Save();
@@ -71,7 +210,7 @@ public static class Bothers
 
             ImGui.SameLine();
             var separateForcedKeys = C.SeparateForcedKeys;
-            if (ImGui.Checkbox("Separate Yes/Talk".Loc(), ref separateForcedKeys))
+            if (ImGui.Checkbox(E.SeparateForcedKeys.Label.Loc(), ref separateForcedKeys))
             {
                 C.SeparateForcedKeys = separateForcedKeys;
                 C.Save();
@@ -81,185 +220,230 @@ public static class Bothers
             {
                 var forcedTalkHotkeyIndex = Array.IndexOf(hotkeyValues, C.ForcedTalkKey);
                 ImGui.SetNextItemWidth(85);
-                if (ImGui.Combo("Forced Talk Hotkey".Loc(), ref forcedTalkHotkeyIndex, hotkeyChoices, hotkeyChoices.Length))
+                if (ImGui.Combo(E.ForcedTalkHotkey.Label.Loc(), ref forcedTalkHotkeyIndex, hotkeyChoices, hotkeyChoices.Length))
                 {
                     C.ForcedTalkKey = hotkeyValues[forcedTalkHotkeyIndex];
                     C.Save();
                 }
             }
 
-            ImGuiX.IndentedTextColored("2. While this key is held, any Yes/No prompt will always default to yes, and all talk dialogue will be skipped. Be careful.".Loc());
+            ImGuiX.IndentedTextColored(E.ForcedYesHotkey.Desc.Loc());
         }
 
         #endregion
         #region Desynthesis/AetherialReduction
 
-        if (ImGui.CollapsingHeader("Desynthesis and Aetherial Reduction".Loc()))
+        if (Header("Desynthesis and Aetherial Reduction", E.Desynth, out all))
         {
-            // 3. SalvageDialog
-            var desynthDialog = C.DesynthDialogEnabled;
-            if (ImGui.Checkbox("SalvageDialog".Loc(), ref desynthDialog))
+            if (Show(all, E.SalvageDialog) || Show(all, E.DesynthBulk))
             {
-                C.DesynthDialogEnabled = desynthDialog;
-                C.Save();
-            }
-            ImGuiX.IndentedTextColored("Remove the Desynthesis menu confirmation.".Loc());
-
-            // 4. SalvageDialog (Bulk)
-            if (C.DesynthDialogEnabled)
-            {
-                using var indent = ImRaii.PushIndent();
-                var desynthBulkDialog = C.DesynthBulkDialogEnabled;
-                if (ImGui.Checkbox("Desynthesize until none are left".Loc(), ref desynthBulkDialog))
+                // 3. SalvageDialog
+                var desynthDialog = C.DesynthDialogEnabled;
+                if (ImGui.Checkbox(E.SalvageDialog.Label.Loc(), ref desynthDialog))
                 {
-                    C.DesynthBulkDialogEnabled = desynthBulkDialog;
+                    C.DesynthDialogEnabled = desynthDialog;
                     C.Save();
                 }
-                ImGuiX.IndentedTextColored("Before confirming, also tick the game's own checkbox to keep desynthesizing until none of the item are left. The game only offers it when you hold more than one.".Loc());
+                ImGuiX.IndentedTextColored(E.SalvageDialog.Desc.Loc());
+
+                // 4. SalvageDialog (Bulk)
+                if (C.DesynthDialogEnabled)
+                {
+                    using var indent = ImRaii.PushIndent();
+                    var desynthBulkDialog = C.DesynthBulkDialogEnabled;
+                    if (ImGui.Checkbox(E.DesynthBulk.Label.Loc(), ref desynthBulkDialog))
+                    {
+                        C.DesynthBulkDialogEnabled = desynthBulkDialog;
+                        C.Save();
+                    }
+                    ImGuiX.IndentedTextColored(E.DesynthBulk.Desc.Loc());
+                }
             }
 
             // 5. SalvageResults
-            var desynthResultsDialog = C.DesynthesisResults;
-            if (ImGui.Checkbox("SalvageResults".Loc(), ref desynthResultsDialog))
+            if (Show(all, E.SalvageResults))
             {
-                C.DesynthesisResults = desynthResultsDialog;
-                C.Save();
+                var desynthResultsDialog = C.DesynthesisResults;
+                if (ImGui.Checkbox(E.SalvageResults.Label.Loc(), ref desynthResultsDialog))
+                {
+                    C.DesynthesisResults = desynthResultsDialog;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.SalvageResults.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically closes the SalvageResults window when done desynthesizing.".Loc());
 
-            var purifyResultsDialog = C.AetherialReductionResults;
-            if (ImGui.Checkbox("PurifyResult".Loc(), ref purifyResultsDialog))
+            if (Show(all, E.PurifyResult))
             {
-                C.AetherialReductionResults = purifyResultsDialog;
-                C.Save();
+                var purifyResultsDialog = C.AetherialReductionResults;
+                if (ImGui.Checkbox(E.PurifyResult.Label.Loc(), ref purifyResultsDialog))
+                {
+                    C.AetherialReductionResults = purifyResultsDialog;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.PurifyResult.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically closes the PurifyResult window when done reducing.".Loc());
 
-            var purifyAutomatic = C.AetherialReductionAutomatic;
-            if (ImGui.Checkbox("PurifyResult (Automatic)".Loc(), ref purifyAutomatic))
+            if (Show(all, E.PurifyAutomatic))
             {
-                C.AetherialReductionAutomatic = purifyAutomatic;
-                C.Save();
+                var purifyAutomatic = C.AetherialReductionAutomatic;
+                if (ImGui.Checkbox(E.PurifyAutomatic.Label.Loc(), ref purifyAutomatic))
+                {
+                    C.AetherialReductionAutomatic = purifyAutomatic;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.PurifyAutomatic.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Press the game's own Automatic button on the PurifyResult window, so the game reduces every remaining item by itself. You still reduce the first item yourself.".Loc());
         }
 
         #endregion
         #region Melding
 
-        if (ImGui.CollapsingHeader("Melding".Loc()))
+        if (Header("Melding", E.Melding, out all))
         {
-            var meld = C.MaterialAttachDialogEnabled;
-            if (ImGui.Checkbox("MateriaAttachDialog".Loc(), ref meld))
+            if (Show(all, E.MateriaAttach))
             {
-                C.MaterialAttachDialogEnabled = meld;
-                C.Save();
+                var meld = C.MaterialAttachDialogEnabled;
+                if (ImGui.Checkbox(E.MateriaAttach.Label.Loc(), ref meld))
+                {
+                    C.MaterialAttachDialogEnabled = meld;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.MateriaAttach.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Remove the materia melding confirmation menu.".Loc());
 
-            var materialize = C.MaterializeDialogEnabled;
-            if (ImGui.Checkbox("MaterializeDialog".Loc(), ref materialize))
+            if (Show(all, E.Materialize))
             {
-                C.MaterializeDialogEnabled = materialize;
-                C.Save();
+                var materialize = C.MaterializeDialogEnabled;
+                if (ImGui.Checkbox(E.Materialize.Label.Loc(), ref materialize))
+                {
+                    C.MaterializeDialogEnabled = materialize;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.Materialize.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Remove the create new (extract) materia confirmation.".Loc());
 
-            var materiaRetrieve = C.MateriaRetrieveDialogEnabled;
-            if (ImGui.Checkbox("MateriaRetrieveDialog".Loc(), ref materiaRetrieve))
+            if (Show(all, E.MateriaRetrieve))
             {
-                C.MateriaRetrieveDialogEnabled = materiaRetrieve;
-                C.Save();
+                var materiaRetrieve = C.MateriaRetrieveDialogEnabled;
+                if (ImGui.Checkbox(E.MateriaRetrieve.Label.Loc(), ref materiaRetrieve))
+                {
+                    C.MateriaRetrieveDialogEnabled = materiaRetrieve;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.MateriaRetrieve.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Remove the retrieve materia confirmation.".Loc());
         }
 
         #endregion
         #region Retainers & Submersibles
 
-        if (ImGui.CollapsingHeader("Retainers and Submersibles".Loc()))
+        if (Header("Retainers and Submersibles", E.Retainers, out all))
         {
-            var retainerTaskAsk = C.RetainerTaskAskEnabled;
-            if (ImGui.Checkbox("RetainerTaskAsk".Loc(), ref retainerTaskAsk))
+            if (Show(all, E.RetainerTaskAsk))
             {
-                C.RetainerTaskAskEnabled = retainerTaskAsk;
-                C.Save();
+                var retainerTaskAsk = C.RetainerTaskAskEnabled;
+                if (ImGui.Checkbox(E.RetainerTaskAsk.Label.Loc(), ref retainerTaskAsk))
+                {
+                    C.RetainerTaskAskEnabled = retainerTaskAsk;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.RetainerTaskAsk.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Skip the confirmation in the final dialog before sending out a retainer.".Loc());
 
-            var retainerTaskResult = C.RetainerTaskResultEnabled;
-            if (ImGui.Checkbox("RetainerTaskResult".Loc(), ref retainerTaskResult))
+            if (Show(all, E.RetainerTaskResult))
             {
-                C.RetainerTaskResultEnabled = retainerTaskResult;
-                C.Save();
+                var retainerTaskResult = C.RetainerTaskResultEnabled;
+                if (ImGui.Checkbox(E.RetainerTaskResult.Label.Loc(), ref retainerTaskResult))
+                {
+                    C.RetainerTaskResultEnabled = retainerTaskResult;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.RetainerTaskResult.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically send a retainer on the same venture as before when receiving an item.".Loc());
 
-            var retainerListDialog = C.RetainerTransferListConfirm;
-            if (ImGui.Checkbox("RetainerItemTransferList".Loc(), ref retainerListDialog))
+            if (Show(all, E.RetainerTransferList))
             {
-                C.RetainerTransferListConfirm = retainerListDialog;
-                C.Save();
+                var retainerListDialog = C.RetainerTransferListConfirm;
+                if (ImGui.Checkbox(E.RetainerTransferList.Label.Loc(), ref retainerListDialog))
+                {
+                    C.RetainerTransferListConfirm = retainerListDialog;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.RetainerTransferList.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Skip the confirmation in the RetainerItemTransferList window to entrust all items to the retainer.".Loc());
 
-            var retainerProgressDialog = C.RetainerTransferProgressConfirm;
-            if (ImGui.Checkbox("RetainerItemTransferProgress".Loc(), ref retainerProgressDialog))
+            if (Show(all, E.RetainerTransferProgress))
             {
-                C.RetainerTransferProgressConfirm = retainerProgressDialog;
-                C.Save();
+                var retainerProgressDialog = C.RetainerTransferProgressConfirm;
+                if (ImGui.Checkbox(E.RetainerTransferProgress.Label.Loc(), ref retainerProgressDialog))
+                {
+                    C.RetainerTransferProgressConfirm = retainerProgressDialog;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.RetainerTransferProgress.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically closes the RetainerItemTransferProgress window when finished entrusting items.".Loc());
 
-            var finalize = C.AirShipExplorationResultFinalize;
-            if (ImGui.Checkbox("AirShipExplorationResult - Finalize".Loc(), ref finalize))
+            if (Show(all, E.AirShipFinalize))
             {
-                if (finalize && C.AirShipExplorationResultRedeploy)
-                    C.AirShipExplorationResultRedeploy = false;
-                C.AirShipExplorationResultFinalize = finalize;
-                C.Save();
+                var finalize = C.AirShipExplorationResultFinalize;
+                if (ImGui.Checkbox(E.AirShipFinalize.Label.Loc(), ref finalize))
+                {
+                    if (finalize && C.AirShipExplorationResultRedeploy)
+                        C.AirShipExplorationResultRedeploy = false;
+                    C.AirShipExplorationResultFinalize = finalize;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.AirShipFinalize.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically finalize submersible reports when the AirShipExplorationResult window opens.".Loc());
 
-            var redeploy = C.AirShipExplorationResultRedeploy;
-            if (ImGui.Checkbox("AirShipExplorationResult - Redeploy".Loc(), ref redeploy))
+            if (Show(all, E.AirShipRedeploy))
             {
-                if (redeploy && C.AirShipExplorationResultFinalize)
-                    C.AirShipExplorationResultFinalize = false;
-                C.AirShipExplorationResultRedeploy = redeploy;
-                C.Save();
+                var redeploy = C.AirShipExplorationResultRedeploy;
+                if (ImGui.Checkbox(E.AirShipRedeploy.Label.Loc(), ref redeploy))
+                {
+                    if (redeploy && C.AirShipExplorationResultFinalize)
+                        C.AirShipExplorationResultFinalize = false;
+                    C.AirShipExplorationResultRedeploy = redeploy;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.AirShipRedeploy.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically redeploy submersibles when the AirShipExplorationResult window opens.".Loc());
         }
 
         #endregion
         #region Duties
 
-        if (ImGui.CollapsingHeader("Duties".Loc()))
+        if (Header("Duties", E.Duties, out all))
         {
-            var contentsFinderConfirm = C.ContentsFinderConfirmEnabled;
-            if (ImGui.Checkbox("ContentsFinderConfirm".Loc(), ref contentsFinderConfirm))
+            if (Show(all, E.ContentsFinderConfirm))
             {
-                C.ContentsFinderConfirmEnabled = contentsFinderConfirm;
+                var contentsFinderConfirm = C.ContentsFinderConfirmEnabled;
+                if (ImGui.Checkbox(E.ContentsFinderConfirm.Label.Loc(), ref contentsFinderConfirm))
+                {
+                    C.ContentsFinderConfirmEnabled = contentsFinderConfirm;
 
-                if (!contentsFinderConfirm)
-                    C.ContentsFinderOneTimeConfirmEnabled = false;
+                    if (!contentsFinderConfirm)
+                        C.ContentsFinderOneTimeConfirmEnabled = false;
 
-                C.Save();
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.ContentsFinderConfirm.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically commence duties when ready.".Loc());
 
-            var contentsFinderOneTimeConfirm = C.ContentsFinderOneTimeConfirmEnabled;
-            if (ImGui.Checkbox("ContentsFinderOneTimeConfirm".Loc(), ref contentsFinderOneTimeConfirm))
+            if (Show(all, E.ContentsFinderOneTime))
             {
-                C.ContentsFinderOneTimeConfirmEnabled = contentsFinderOneTimeConfirm;
+                var contentsFinderOneTimeConfirm = C.ContentsFinderOneTimeConfirmEnabled;
+                if (ImGui.Checkbox(E.ContentsFinderOneTime.Label.Loc(), ref contentsFinderOneTimeConfirm))
+                {
+                    C.ContentsFinderOneTimeConfirmEnabled = contentsFinderOneTimeConfirm;
 
-                if (contentsFinderOneTimeConfirm)
-                    C.ContentsFinderConfirmEnabled = true;
+                    if (contentsFinderOneTimeConfirm)
+                        C.ContentsFinderConfirmEnabled = true;
 
-                C.Save();
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.ContentsFinderOneTime.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically commence duties when ready, but only once. Requires Contents Finder Confirm, and disables both after activation.".Loc());
 
             //var dutyDifficulty = C.DifficultySelectYesNoEnabled;
             //if (ImGui.Checkbox("SelectYesNoDifficulty", ref dutyDifficulty))
@@ -283,267 +467,341 @@ public static class Bothers
         #endregion
         #region PvP
 
-        if (ImGui.CollapsingHeader("PvP"))
+        if (Header("PvP", E.PvP, out all))
         {
-            var ccquit = C.MKSRecordQuit;
-            if (ImGui.Checkbox("MKSRecord".Loc(), ref ccquit))
+            if (Show(all, E.MKSRecord))
             {
-                C.MKSRecordQuit = ccquit;
-                C.Save();
+                var ccquit = C.MKSRecordQuit;
+                if (ImGui.Checkbox(E.MKSRecord.Label.Loc(), ref ccquit))
+                {
+                    C.MKSRecordQuit = ccquit;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.MKSRecord.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically leave the Crystalline Conflict match when the results appear.".Loc());
 
-            var flquit = C.FrontlineRecordQuit;
-            if (ImGui.Checkbox("FrontlineRecord".Loc(), ref flquit))
+            if (Show(all, E.FrontlineRecord))
             {
-                C.FrontlineRecordQuit = flquit;
-                C.Save();
+                var flquit = C.FrontlineRecordQuit;
+                if (ImGui.Checkbox(E.FrontlineRecord.Label.Loc(), ref flquit))
+                {
+                    C.FrontlineRecordQuit = flquit;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.FrontlineRecord.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically leave the Frontline match when the results appear.".Loc());
         }
 
         #endregion
         #region Gold Saucer
 
-        if (ImGui.CollapsingHeader("Minigames and Special Events".Loc()))
+        if (Header("Minigames and Special Events", E.Minigames, out all))
         {
-            var lotto = C.LotteryWeeklyInput;
-            if (ImGui.Checkbox("LotteryWeeklyInput".Loc(), ref lotto))
+            if (Show(all, E.LotteryWeekly))
             {
-                C.LotteryWeeklyInput = lotto;
-                C.Save();
-            }
-            ImGuiX.IndentedTextColored("Automatically purchase a Jumbo Cactpot ticket when the number entry window opens.".Loc());
-
-            if (C.LotteryWeeklyInput)
-            {
-                using var indent = ImRaii.PushIndent();
-
-                var randomMode = C.LotteryWeeklyNumberMode == Configuration.JumboCactpotNumberMode.Random;
-                if (ImGui.RadioButton("Random number".Loc(), randomMode))
+                var lotto = C.LotteryWeeklyInput;
+                if (ImGui.Checkbox(E.LotteryWeekly.Label.Loc(), ref lotto))
                 {
-                    C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Random;
+                    C.LotteryWeeklyInput = lotto;
                     C.Save();
                 }
+                ImGuiX.IndentedTextColored(E.LotteryWeekly.Desc.Loc());
 
-                ImGui.SameLine();
-                if (ImGui.RadioButton("Fixed number".Loc(), !randomMode))
+                if (C.LotteryWeeklyInput)
                 {
-                    C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Fixed;
-                    C.Save();
-                }
+                    using var indent = ImRaii.PushIndent();
 
-                if (!randomMode)
-                {
-                    var fixedNumber = C.LotteryWeeklyFixedNumber;
-                    ImGui.SetNextItemWidth(100);
-                    if (ImGui.InputInt("Number (0-9999)".Loc(), ref fixedNumber))
+                    var randomMode = C.LotteryWeeklyNumberMode == Configuration.JumboCactpotNumberMode.Random;
+                    if (ImGui.RadioButton("Random number".Loc(), randomMode))
                     {
-                        C.LotteryWeeklyFixedNumber = Math.Clamp(fixedNumber, 0, 9999);
+                        C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Random;
                         C.Save();
+                    }
+
+                    ImGui.SameLine();
+                    if (ImGui.RadioButton("Fixed number".Loc(), !randomMode))
+                    {
+                        C.LotteryWeeklyNumberMode = Configuration.JumboCactpotNumberMode.Fixed;
+                        C.Save();
+                    }
+
+                    if (!randomMode)
+                    {
+                        var fixedNumber = C.LotteryWeeklyFixedNumber;
+                        ImGui.SetNextItemWidth(100);
+                        if (ImGui.InputInt("Number (0-9999)".Loc(), ref fixedNumber))
+                        {
+                            C.LotteryWeeklyFixedNumber = Math.Clamp(fixedNumber, 0, 9999);
+                            C.Save();
+                        }
                     }
                 }
             }
 
             // 19. HWDLottery
-            var kupo = C.KupoOfFortune;
-            if (ImGui.Checkbox("HWDLottery".Loc(), ref kupo))
+            if (Show(all, E.HWDLottery))
             {
-                C.KupoOfFortune = kupo;
-                C.Save();
+                var kupo = C.KupoOfFortune;
+                if (ImGui.Checkbox(E.HWDLottery.Label.Loc(), ref kupo))
+                {
+                    C.KupoOfFortune = kupo;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.HWDLottery.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically select a kupo of fortune reward. This will instantly complete a single kupo ticket but is unable to continue to the next automatically.".Loc());
 
-            var lovQuit = C.LordOfVerminionQuit;
-            if (ImGui.Checkbox("LovmResult".Loc(), ref lovQuit))
+            if (Show(all, E.LovmResult))
             {
-                C.LordOfVerminionQuit = lovQuit;
-                C.Save();
+                var lovQuit = C.LordOfVerminionQuit;
+                if (ImGui.Checkbox(E.LovmResult.Label.Loc(), ref lovQuit))
+                {
+                    C.LordOfVerminionQuit = lovQuit;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.LovmResult.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically quit Lord of Verminion when the results menu appears.".Loc());
 
-            var fgsEnter = C.FallGuysRegisterConfirm;
-            if (ImGui.Checkbox("FGSEnterDialog".Loc(), ref fgsEnter))
+            if (Show(all, E.FGSEnter))
             {
-                C.FallGuysRegisterConfirm = fgsEnter;
-                C.Save();
+                var fgsEnter = C.FallGuysRegisterConfirm;
+                if (ImGui.Checkbox(E.FGSEnter.Label.Loc(), ref fgsEnter))
+                {
+                    C.FallGuysRegisterConfirm = fgsEnter;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.FGSEnter.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically register for Blunderville when speaking with the Blunderville Registrar.".Loc());
 
-            var fgsExit = C.FallGuysExitConfirm;
-            if (ImGui.Checkbox("FGSExitDialog".Loc(), ref fgsExit))
+            if (Show(all, E.FGSExit))
             {
-                C.FallGuysExitConfirm = fgsExit;
-                C.Save();
+                var fgsExit = C.FallGuysExitConfirm;
+                if (ImGui.Checkbox(E.FGSExit.Label.Loc(), ref fgsExit))
+                {
+                    C.FallGuysExitConfirm = fgsExit;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.FGSExit.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically confirm the exit prompt when leaving Blunderville.".Loc());
 
-            var fashionQuit = C.FashionCheckQuit;
-            if (ImGui.Checkbox("FashionCheck".Loc(), ref fashionQuit))
+            if (Show(all, E.FashionCheck))
             {
-                C.FashionCheckQuit = fashionQuit;
-                C.Save();
+                var fashionQuit = C.FashionCheckQuit;
+                if (ImGui.Checkbox(E.FashionCheck.Label.Loc(), ref fashionQuit))
+                {
+                    C.FashionCheckQuit = fashionQuit;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.FashionCheck.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically confirm the Fashion Reports results.".Loc());
 
-            var chocoboQuit = C.ChocoboRacingQuit;
-            if (ImGui.Checkbox("RaceChocoboResult".Loc(), ref chocoboQuit))
+            if (Show(all, E.RaceChocobo))
             {
-                C.ChocoboRacingQuit = chocoboQuit;
-                C.Save();
+                var chocoboQuit = C.ChocoboRacingQuit;
+                if (ImGui.Checkbox(E.RaceChocobo.Label.Loc(), ref chocoboQuit))
+                {
+                    C.ChocoboRacingQuit = chocoboQuit;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.RaceChocobo.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically quit Chocobo Racing when the results menu appears.".Loc());
 
-            var shopCard = C.ShopCardDialog;
-            if (ImGui.Checkbox("ShopCardDialog".Loc(), ref shopCard))
+            if (Show(all, E.ShopCard))
             {
-                C.ShopCardDialog = shopCard;
-                C.Save();
+                var shopCard = C.ShopCardDialog;
+                if (ImGui.Checkbox(E.ShopCard.Label.Loc(), ref shopCard))
+                {
+                    C.ShopCardDialog = shopCard;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.ShopCard.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically confirm selling Triple Triad cards in the saucer.".Loc());
         }
 
         #endregion
         #region Shops
 
-        if (ImGui.CollapsingHeader("Shops".Loc()))
+        if (Header("Shops", E.Shops, out all))
         {
-            var inclusionShopRemember = C.InclusionShopRememberEnabled;
-            if (ImGui.Checkbox("InclusionShopRemember".Loc(), ref inclusionShopRemember))
+            if (Show(all, E.InclusionShopRemember))
             {
-                C.InclusionShopRememberEnabled = inclusionShopRemember;
-                C.Save();
+                var inclusionShopRemember = C.InclusionShopRememberEnabled;
+                if (ImGui.Checkbox(E.InclusionShopRemember.Label.Loc(), ref inclusionShopRemember))
+                {
+                    C.InclusionShopRememberEnabled = inclusionShopRemember;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.InclusionShopRemember.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Remember the last panel visited on the scrip exchange window.".Loc());
 
-            var shopItemExchange = C.ShopExchangeItemDialogEnabled;
-            if (ImGui.Checkbox("ShopExchangeItemDialog".Loc(), ref shopItemExchange))
+            if (Show(all, E.ShopExchangeItem))
             {
-                C.ShopExchangeItemDialogEnabled = shopItemExchange;
-                C.Save();
+                var shopItemExchange = C.ShopExchangeItemDialogEnabled;
+                if (ImGui.Checkbox(E.ShopExchangeItem.Label.Loc(), ref shopItemExchange))
+                {
+                    C.ShopExchangeItemDialogEnabled = shopItemExchange;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.ShopExchangeItem.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically exchange items/currencies in various shops (e.g., scrip vendors).".Loc());
         }
         #endregion
         #region Other
 
-        if (ImGui.CollapsingHeader("Other".Loc()))
+        if (Header("Other", E.Other, out all))
         {
-            var deliveries = C.CustomDeliveries;
-            if (ImGui.Checkbox("SatisfactionSupply".Loc(), ref deliveries))
+            if (Show(all, E.SatisfactionSupply))
             {
-                C.CustomDeliveries = deliveries;
-                C.Save();
+                var deliveries = C.CustomDeliveries;
+                if (ImGui.Checkbox(E.SatisfactionSupply.Label.Loc(), ref deliveries))
+                {
+                    C.CustomDeliveries = deliveries;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.SatisfactionSupply.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically turn in any available collectibles for Custom Deliveries.".Loc());
 
-            var grandCompanySupplyReward = C.GrandCompanySupplyReward;
-            if (ImGui.Checkbox("GrandCompanySupplyReward".Loc(), ref grandCompanySupplyReward))
+            if (Show(all, E.GCSupplyReward))
             {
-                C.GrandCompanySupplyReward = grandCompanySupplyReward;
-                C.Save();
+                var grandCompanySupplyReward = C.GrandCompanySupplyReward;
+                if (ImGui.Checkbox(E.GCSupplyReward.Label.Loc(), ref grandCompanySupplyReward))
+                {
+                    C.GrandCompanySupplyReward = grandCompanySupplyReward;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.GCSupplyReward.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Skip the confirmation when submitting Grand Company expert delivery items.".Loc());
 
-            var journalResultComplete = C.JournalResultCompleteEnabled;
-            if (ImGui.Checkbox("JournalResultComplete".Loc(), ref journalResultComplete))
+            if (Show(all, E.JournalResultComplete))
             {
-                C.JournalResultCompleteEnabled = journalResultComplete;
-                C.Save();
+                var journalResultComplete = C.JournalResultCompleteEnabled;
+                if (ImGui.Checkbox(E.JournalResultComplete.Label.Loc(), ref journalResultComplete))
+                {
+                    C.JournalResultCompleteEnabled = journalResultComplete;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.JournalResultComplete.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically confirm quest reward acceptance when there is nothing to choose.".Loc());
 
-            var guildLeveDifficulty = C.GuildLeveDifficultyConfirm;
-            if (ImGui.Checkbox("GuildLeveDifficulty".Loc(), ref guildLeveDifficulty))
+            if (Show(all, E.GuildLeveDifficulty))
             {
-                C.GuildLeveDifficultyConfirm = guildLeveDifficulty;
-                C.Save();
+                var guildLeveDifficulty = C.GuildLeveDifficultyConfirm;
+                if (ImGui.Checkbox(E.GuildLeveDifficulty.Label.Loc(), ref guildLeveDifficulty))
+                {
+                    C.GuildLeveDifficultyConfirm = guildLeveDifficulty;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.GuildLeveDifficulty.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically confirms guild leves upon initiation at the highest difficulty.".Loc());
 
-            var dkt = C.DataCentreTravelConfirmEnabled;
-            if (ImGui.Checkbox("DataCentreTravelConfirm".Loc(), ref dkt))
+            if (Show(all, E.DataCentreTravel))
             {
-                C.DataCentreTravelConfirmEnabled = dkt;
-                C.Save();
+                var dkt = C.DataCentreTravelConfirmEnabled;
+                if (ImGui.Checkbox(E.DataCentreTravel.Label.Loc(), ref dkt))
+                {
+                    C.DataCentreTravelConfirmEnabled = dkt;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.DataCentreTravel.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically accept the Data Center travel confirmation.".Loc());
 
-            var mpr = C.MiragePrismRemoveDispel;
-            if (ImGui.Checkbox("MiragePrismRemoveDispel".Loc(), ref mpr))
+            if (Show(all, E.MiragePrismRemoveDispel))
             {
-                C.MiragePrismRemoveDispel = mpr;
-                C.Save();
+                var mpr = C.MiragePrismRemoveDispel;
+                if (ImGui.Checkbox(E.MiragePrismRemoveDispel.Label.Loc(), ref mpr))
+                {
+                    C.MiragePrismRemoveDispel = mpr;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.MiragePrismRemoveDispel.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically dispel glamours when using Glamour Dispellers.".Loc());
 
-            var mpe = C.MiragePrismExecuteCast;
-            if (ImGui.Checkbox("MiragePrismExecuteCast".Loc(), ref mpe))
+            if (Show(all, E.MiragePrismExecuteCast))
             {
-                C.MiragePrismExecuteCast = mpe;
-                C.Save();
+                var mpe = C.MiragePrismExecuteCast;
+                if (ImGui.Checkbox(E.MiragePrismExecuteCast.Label.Loc(), ref mpe))
+                {
+                    C.MiragePrismExecuteCast = mpe;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.MiragePrismExecuteCast.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically cast glamours when using Glamour Prisms.".Loc());
 
-            var bpu = C.BannerPreviewUpdate;
-            if (ImGui.Checkbox("BannerPreviewUpdate".Loc(), ref bpu))
+            if (Show(all, E.BannerPreviewUpdate))
             {
-                C.BannerPreviewUpdate = bpu;
-                C.Save();
+                var bpu = C.BannerPreviewUpdate;
+                if (ImGui.Checkbox(E.BannerPreviewUpdate.Label.Loc(), ref bpu))
+                {
+                    C.BannerPreviewUpdate = bpu;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.BannerPreviewUpdate.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically update portraits.".Loc());
         }
 
         #endregion
 
         #region Player Trade
 
-        if (ImGui.CollapsingHeader("Player Trade".Loc()))
+        // 交易設定彼此相依（總開關收合其餘），整段一起顯示、不逐項過濾。
+        if (Header("Player Trade", E.Trade, out _))
             DrawPlayerTrade();
 
         #endregion
 
         #region Forays
-        if (ImGui.CollapsingHeader("Forays".Loc()))
+        if (Header("Forays", E.Forays, out all))
         {
-            var itemInspection = C.ItemInspectionResultEnabled;
-            if (ImGui.Checkbox("ItemInspectionResult".Loc(), ref itemInspection))
+            if (Show(all, E.ItemInspection) || Show(all, E.ItemInspectionRate))
             {
-                C.ItemInspectionResultEnabled = itemInspection;
-                C.Save();
-            }
-            ImGuiX.IndentedTextColored("Eureka/Bozja lockboxes, forgotten fragments, and more. Warning: this does not check if you are maxed on items. Rate limiter (pause after N items).".Loc());
-
-            if (itemInspection)
-            {
-                ImGui.Indent();
-                var rateLimit = C.ItemInspectionResultRateLimiter;
-                if (ImGui.InputInt(string.Empty, ref rateLimit))
+                var itemInspection = C.ItemInspectionResultEnabled;
+                if (ImGui.Checkbox(E.ItemInspection.Label.Loc(), ref itemInspection))
                 {
-                    C.ItemInspectionResultRateLimiter = rateLimit;
+                    C.ItemInspectionResultEnabled = itemInspection;
                     C.Save();
                 }
-                ImGui.Unindent();
-                ImGuiX.IndentedTextColored("Rate limiter (pause after N items, 0 to disable).".Loc());
+                ImGuiX.IndentedTextColored(E.ItemInspection.Desc.Loc());
+
+                if (itemInspection)
+                {
+                    ImGui.Indent();
+                    var rateLimit = C.ItemInspectionResultRateLimiter;
+                    if (ImGui.InputInt(string.Empty, ref rateLimit))
+                    {
+                        C.ItemInspectionResultRateLimiter = rateLimit;
+                        C.Save();
+                    }
+                    ImGui.Unindent();
+                    ImGuiX.IndentedTextColored(E.ItemInspectionRate.Desc.Loc());
+                }
             }
 
-            var wksAnnounceHide = C.WKSAnnounceHide;
-            if (ImGui.Checkbox("WKSAnnounceHide".Loc(), ref wksAnnounceHide))
+            if (Show(all, E.WKSAnnounceHide))
             {
-                C.WKSAnnounceHide = wksAnnounceHide;
-                C.Save();
+                var wksAnnounceHide = C.WKSAnnounceHide;
+                if (ImGui.Checkbox(E.WKSAnnounceHide.Label.Loc(), ref wksAnnounceHide))
+                {
+                    C.WKSAnnounceHide = wksAnnounceHide;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.WKSAnnounceHide.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Hide Cosmic Exploration announcements.".Loc());
 
-            var wksRewardClose = C.WKSRewardClose;
-            if (ImGui.Checkbox("WKSRewardHide".Loc(), ref wksRewardClose))
+            if (Show(all, E.WKSRewardHide))
             {
-                C.WKSRewardClose = wksRewardClose;
-                C.Save();
+                var wksRewardClose = C.WKSRewardClose;
+                if (ImGui.Checkbox(E.WKSRewardHide.Label.Loc(), ref wksRewardClose))
+                {
+                    C.WKSRewardClose = wksRewardClose;
+                    C.Save();
+                }
+                ImGuiX.IndentedTextColored(E.WKSRewardHide.Desc.Loc());
             }
-            ImGuiX.IndentedTextColored("Automatically close the Cosmic Exploration rewards window.".Loc());
         }
         #endregion
+
+        if (!anyHeaderShown)
+            ImGui.TextDisabled("No matching options.".Loc());
+        filterChanged = false;
     }
 
     /// <summary>「限時自動確認」輸入框的分鐘數：只是 UI 暫存，不存檔。</summary>
@@ -552,12 +810,12 @@ public static class Bothers
     private static void DrawPlayerTrade()
     {
         var enabled = C.TradeAutoConfirm;
-        if (ImGui.Checkbox("Auto-offer and confirm after the trade partner offers".Loc(), ref enabled))
+        if (ImGui.Checkbox(E.TradeAutoConfirm.Label.Loc(), ref enabled))
         {
             C.TradeAutoConfirm = enabled;
             C.Save();
         }
-        ImGuiX.IndentedTextColored("Step 1: when the other player has pressed Offer and the trade contents have not changed for the delay set below, press Offer for you (at most once per trade). If the contents change after the other player offered, you press it yourself; while you are typing a quantity or have a menu open, it waits. Step 2: when the other player has confirmed, press OK on the trade confirmation for you. Only acts while timed auto-confirm is running, or the whitelist is on and the partner is on it. While this is on, every trade state change is written to the log (search for [TradeAutoConfirm]).".Loc());
+        ImGuiX.IndentedTextColored(E.TradeAutoConfirm.Desc.Loc());
         if (!C.TradeAutoConfirm) return;
 
         using var indent = ImRaii.PushIndent();
@@ -580,7 +838,7 @@ public static class Bothers
         ImGuiX.IndentedTextColored("How long the other player's offer and the trade contents must stay unchanged before Offer is pressed for you.".Loc());
 
         ImGui.Spacing();
-        ImGui.TextUnformatted("Timed auto-confirm".Loc());
+        ImGui.TextUnformatted(E.TradeTimed.Label.Loc());
         ImGui.SameLine();
         var remaining = Features.TradeAutoConfirm.TimedRemainingMs;
         if (remaining > 0)
@@ -599,16 +857,16 @@ public static class Bothers
             if (ImGui.Button("Stop".Loc() + "##TradeTimedStop"))
                 Features.TradeAutoConfirm.StopTimed("設定頁關閉");
         }
-        ImGuiX.IndentedTextColored("Any partner is accepted while it runs. Never saved: reloading the plugin, logging in or logging out always turns it off.".Loc());
+        ImGuiX.IndentedTextColored(E.TradeTimed.Desc.Loc());
 
         ImGui.Spacing();
         var whitelist = C.TradeWhitelistEnabled;
-        if (ImGui.Checkbox("Trade partner whitelist".Loc(), ref whitelist))
+        if (ImGui.Checkbox(E.TradeWhitelist.Label.Loc(), ref whitelist))
         {
             C.TradeWhitelistEnabled = whitelist;
             C.Save();
         }
-        ImGuiX.IndentedTextColored("Only partners on this list (name + home world) are auto-confirmed. If the partner cannot be verified, nothing is pressed.".Loc());
+        ImGuiX.IndentedTextColored(E.TradeWhitelist.Desc.Loc());
         if (ImGui.Button("Add current trade partner / targeted player".Loc() + "##TradeWhitelistAdd"))
             Features.TradeAutoConfirm.AddCandidate();
 
