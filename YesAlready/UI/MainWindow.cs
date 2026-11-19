@@ -156,6 +156,8 @@ internal class MainWindow : Window
             }
         }
 
+        Service.BotherBadges.DrawSettings();
+
         using (var combo = ImRaii.Combo("###ChatChannelSelect", $"{Enum.GetName(C.MessageChannel)}"))
         {
             if (combo)

@@ -4,6 +4,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using ECommons.ImGuiMethods;
 using ECommons.LanguageHelpers;
+using ECommons.SimpleGui;
 using Dalamud.Bindings.ImGui;
 using System;
 using System.Linq;
@@ -31,9 +32,9 @@ public static class Bothers
     #region Search
 
     /// <summary>搜尋比對用的英文原文（同時是 loc 鍵）；比對時英文與繁中都看。</summary>
-    private readonly record struct Entry(string Label, string Desc);
+    internal readonly record struct Entry(string Label, string Desc);
 
-    private static class E
+    internal static class E
     {
         public static readonly Entry DisableHotkey = new("Disable Hotkey", "While this key is held, the plugin is disabled.");
         public static readonly Entry ForcedYesHotkey = new("Forced Yes Hotkey", "2. While this key is held, any Yes/No prompt will always default to yes, and all talk dialogue will be skipped. Be careful.");
@@ -158,11 +159,59 @@ public static class Bothers
         }
     }
 
+    private static bool selectTab;
+
+    /// <summary>打開設定視窗、切到這個分頁，並把搜尋框填成 <paramref name="term"/>（命中的分類會展開）。</summary>
+    internal static void Focus(string term)
+    {
+        Array.Clear(filterBuf);
+        var len = Encoding.UTF8.GetBytes(term, 0, Math.Min(term.Length, 128), filterBuf, 0);
+        filter = Encoding.UTF8.GetString(filterBuf, 0, len).Trim();
+        filterChanged = true;
+        selectTab = true;
+        EzConfigGui.Open();
+    }
+
+    #endregion
+
+    #region Linked toggles
+
+    // 分頁與視窗徽章共用的連動規則：兩邊都只透過這幾支改值，存檔由呼叫端負責。
+    internal static void SetAirShipFinalize(bool value)
+    {
+        if (value && C.AirShipExplorationResultRedeploy)
+            C.AirShipExplorationResultRedeploy = false;
+        C.AirShipExplorationResultFinalize = value;
+    }
+
+    internal static void SetAirShipRedeploy(bool value)
+    {
+        if (value && C.AirShipExplorationResultFinalize)
+            C.AirShipExplorationResultFinalize = false;
+        C.AirShipExplorationResultRedeploy = value;
+    }
+
+    internal static void SetContentsFinderConfirm(bool value)
+    {
+        C.ContentsFinderConfirmEnabled = value;
+        if (!value)
+            C.ContentsFinderOneTimeConfirmEnabled = false;
+    }
+
+    internal static void SetContentsFinderOneTime(bool value)
+    {
+        C.ContentsFinderOneTimeConfirmEnabled = value;
+        if (value)
+            C.ContentsFinderConfirmEnabled = true;
+    }
+
     #endregion
 
     public static void Draw()
     {
-        using var tab = ImRaii.TabItem("Bothers".Loc());
+        var select = selectTab;
+        selectTab = false;
+        using var tab = ImRaii.TabItem("Bothers".Loc(), select ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None);
         if (!tab) return;
         using var idScope = ImRaii.PushId($"BothersOptions");
 
@@ -388,9 +437,7 @@ public static class Bothers
                 var finalize = C.AirShipExplorationResultFinalize;
                 if (ImGui.Checkbox(E.AirShipFinalize.Label.Loc(), ref finalize))
                 {
-                    if (finalize && C.AirShipExplorationResultRedeploy)
-                        C.AirShipExplorationResultRedeploy = false;
-                    C.AirShipExplorationResultFinalize = finalize;
+                    SetAirShipFinalize(finalize);
                     C.Save();
                 }
                 ImGuiX.IndentedTextColored(E.AirShipFinalize.Desc.Loc());
@@ -401,9 +448,7 @@ public static class Bothers
                 var redeploy = C.AirShipExplorationResultRedeploy;
                 if (ImGui.Checkbox(E.AirShipRedeploy.Label.Loc(), ref redeploy))
                 {
-                    if (redeploy && C.AirShipExplorationResultFinalize)
-                        C.AirShipExplorationResultFinalize = false;
-                    C.AirShipExplorationResultRedeploy = redeploy;
+                    SetAirShipRedeploy(redeploy);
                     C.Save();
                 }
                 ImGuiX.IndentedTextColored(E.AirShipRedeploy.Desc.Loc());
@@ -420,11 +465,7 @@ public static class Bothers
                 var contentsFinderConfirm = C.ContentsFinderConfirmEnabled;
                 if (ImGui.Checkbox(E.ContentsFinderConfirm.Label.Loc(), ref contentsFinderConfirm))
                 {
-                    C.ContentsFinderConfirmEnabled = contentsFinderConfirm;
-
-                    if (!contentsFinderConfirm)
-                        C.ContentsFinderOneTimeConfirmEnabled = false;
-
+                    SetContentsFinderConfirm(contentsFinderConfirm);
                     C.Save();
                 }
                 ImGuiX.IndentedTextColored(E.ContentsFinderConfirm.Desc.Loc());
@@ -435,11 +476,7 @@ public static class Bothers
                 var contentsFinderOneTimeConfirm = C.ContentsFinderOneTimeConfirmEnabled;
                 if (ImGui.Checkbox(E.ContentsFinderOneTime.Label.Loc(), ref contentsFinderOneTimeConfirm))
                 {
-                    C.ContentsFinderOneTimeConfirmEnabled = contentsFinderOneTimeConfirm;
-
-                    if (contentsFinderOneTimeConfirm)
-                        C.ContentsFinderConfirmEnabled = true;
-
+                    SetContentsFinderOneTime(contentsFinderOneTimeConfirm);
                     C.Save();
                 }
                 ImGuiX.IndentedTextColored(E.ContentsFinderOneTime.Desc.Loc());

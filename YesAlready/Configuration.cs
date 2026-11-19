@@ -32,6 +32,10 @@ public partial class Configuration() : IPluginConfiguration
     public VirtualKey ForcedTalkKey { get; set; } = VirtualKey.NO_KEY;
     public VirtualKey DisableKey { get; set; } = VirtualKey.NO_KEY;
     public bool SeparateForcedKeys { get; set; } = false;
+
+    /// <summary>在可自動處理的遊戲視窗標題旁畫徽章；上游預設開，這裡預設關（會改變既有使用者的畫面）。</summary>
+    public bool ShowBotherBadges { get; set; } = false;
+    public bool HideBadgeWhenBotherEnabled { get; set; } = true;
     public TextFolderNode RootFolder { get; private set; } = new TextFolderNode { Name = "/" };
     public TextFolderNode OkRootFolder { get; private set; } = new TextFolderNode { Name = "/" };
     public TextFolderNode ListRootFolder { get; private set; } = new TextFolderNode { Name = "/" };
