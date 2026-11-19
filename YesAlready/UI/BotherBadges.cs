@@ -129,9 +129,32 @@ public sealed class BotherBadges : IDisposable
         return [.. byAddon.Select(kv => new BadgedWindow(kv.Key, [.. kv.Value.Toggles], kv.Value.Term))];
     }
 
+    // 每幀會呼叫的遊戲函式位址；任一沒解到就不呼叫（找視窗的沒解到＝整個不畫，量標題的沒解到＝放左上角）。
+    // 位址在插件載入前就解好、執行期不變 ⇒ 只算一次。UIModule.GetRaptureAtkModule 是虛擬函式、沒有位址可判。
+    private static bool? canFindAddons;
+    private static bool? canMeasureTitle;
+
+    private static bool CanFindAddons => canFindAddons ??= CheckNative("找遊戲視窗", "徽章整個不畫",
+        ("Framework.Instance", FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Addresses.Instance.Value),
+        ("Framework.GetUIModule", FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Addresses.GetUIModule.Value),
+        ("AtkUnitManager.GetAddonByName", AtkUnitManager.Addresses.GetAddonByName.Value));
+
+    private static bool CanMeasureTitle => canMeasureTitle ??= CheckNative("量標題文字", "徽章改放視窗左上角",
+        ("AtkUldManager.SearchNodeById", AtkUldManager.Addresses.SearchNodeById.Value),
+        ("AtkResNode.IsVisible", AtkResNode.Addresses.IsVisible.Value),
+        ("AtkTextNode.GetTextDrawSize", AtkTextNode.Addresses.GetTextDrawSize.Value));
+
+    private static bool CheckNative(string purpose, string fallback, params (string Name, nint Address)[] members)
+    {
+        var missing = members.Where(m => m.Address == 0).Select(m => m.Name).ToArray();
+        if (missing.Length == 0) return true;
+        PluginLog.Debug($"[BotherBadges] {purpose}需要的遊戲函式沒解到位址（{string.Join("、", missing)}），{fallback}。");
+        return false;
+    }
+
     private unsafe void Draw()
     {
-        if (!C.ShowBotherBadges) return;
+        if (!C.ShowBotherBadges || !CanFindAddons) return;
 
         windows ??= BuildWindows();
         foreach (var window in windows)
@@ -289,7 +312,7 @@ public sealed class BotherBadges : IDisposable
     private static unsafe bool TryGetTitleEnd(AtkUnitBase* addon, out Vector2 titleEnd)
     {
         titleEnd = default;
-        if (addon->WindowNode == null || addon->WindowNode->Component == null)
+        if (!CanMeasureTitle || addon->WindowNode == null || addon->WindowNode->Component == null)
             return false;
 
         var window = (AtkComponentWindow*)addon->WindowNode->Component;
